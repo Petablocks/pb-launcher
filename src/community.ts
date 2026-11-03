@@ -53,3 +53,27 @@ export const submitCrashWebhook = (args: {
   summary: string;
   logSnippet: string;
 }): Promise<void> => invoke<void>("crash_submit_webhook", args);
+
+export interface LauncherUpdateInfo {
+  currentVersion: string;
+  latestVersion: string;
+  updateAvailable: boolean;
+  downloadUrl: string | null;
+  releaseUrl: string;
+  notes: string;
+}
+
+export const checkLauncherUpdate = (currentVersion: string): Promise<LauncherUpdateInfo> =>
+  inTauri
+    ? invoke<LauncherUpdateInfo>("updater_check", { currentVersion })
+    : Promise.resolve({
+        currentVersion,
+        latestVersion: currentVersion,
+        updateAvailable: false,
+        downloadUrl: null,
+        releaseUrl: "https://github.com/Petablocks/pb-launcher/releases",
+        notes: "",
+      });
+
+export const installLauncherUpdate = (downloadUrl: string, version: string): Promise<void> =>
+  invoke<void>("updater_install", { downloadUrl, version });

@@ -5,6 +5,7 @@ mod launch;
 mod ping;
 mod settings;
 mod sync;
+mod updater;
 
 use auth::{DeviceCodeInfo, Session};
 use community::{CrashReportInfo, ScreenshotItem};
@@ -14,6 +15,7 @@ use ping::ServerStatus;
 use settings::LauncherSettings;
 use sync::{CustomModFile, InstanceState, LauncherManifest};
 use tauri::AppHandle;
+use updater::LauncherUpdateInfo;
 
 #[tauri::command]
 async fn auth_start_login() -> Result<DeviceCodeInfo, String> {
@@ -129,6 +131,16 @@ async fn crash_submit_webhook(
     community::submit_crash_webhook(&webhook_url, &player_name, &instance_id, &summary, &log_snippet).await
 }
 
+#[tauri::command]
+async fn updater_check(current_version: String) -> Result<LauncherUpdateInfo, String> {
+    updater::check_for_update(&current_version).await
+}
+
+#[tauri::command]
+async fn updater_install(app: AppHandle, download_url: String, version: String) -> Result<(), String> {
+    updater::install_update(app, download_url, version).await
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     community::update_discord_rpc("In PETABLOCKS Launcher", "Ready to Play");
@@ -155,7 +167,9 @@ pub fn run() {
             screenshots_list,
             screenshots_dir,
             crash_latest,
-            crash_submit_webhook
+            crash_submit_webhook,
+            updater_check,
+            updater_install
         ])
         .run(tauri::generate_context!())
         .expect("error while running PETABLOCKS Launcher");

@@ -3,6 +3,12 @@
 All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-11-03
+### Added
+- **In-App Auto-Updater (`src-tauri/src/updater.rs`, `src/App.tsx`)**:
+  - Automatically checks `https://api.github.com/repos/Petablocks/pb-launcher/releases/latest` at startup, every 2 minutes, and on manual click of the sidebar refresh icon.
+  - Displays a prominent top update banner when a newer release is published and provides one-click download + NSIS installer execution (`Update & Restart Now`).
+
 ## [1.1.1] - 2026-11-03
 ### Changed
 - **Minecraft Services Diagnostic (`src-tauri/src/auth.rs`)**:
