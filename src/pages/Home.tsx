@@ -1,8 +1,15 @@
-import { Play, UserRound } from "lucide-react";
+import { Play } from "lucide-react";
 import { INSTANCES } from "../instances";
+import AccountCard from "../components/AccountCard";
+import { Session } from "../auth";
 import logo from "../assets/petablocks-logo-horizontal-512w.png";
 
-export default function Home() {
+interface Props {
+  session: Session | null;
+  onSession: (s: Session | null) => void;
+}
+
+export default function Home({ session, onSession }: Props) {
   const instance = INSTANCES[0];
   return (
     <div className="mx-auto max-w-3xl">
@@ -25,13 +32,13 @@ export default function Home() {
           >
             <Play size={20} fill="currentColor" /> Play
           </button>
-          <p className="mt-3 text-xs text-pb-muted">Sign in to play is coming in the next release.</p>
+          <p className="mt-3 text-xs text-pb-muted">
+            {session ? "Game launch arrives in a later release." : "Sign in with Microsoft to play."}
+          </p>
         </div>
       </section>
 
-      <div className="mt-6 flex items-center gap-3 rounded-xl border border-white/10 bg-pb-card p-4 text-sm text-pb-muted">
-        <UserRound size={18} /> Not signed in
-      </div>
+      <AccountCard session={session} onSession={onSession} />
     </div>
   );
 }

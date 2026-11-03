@@ -3,6 +3,7 @@ import { Gamepad2, Boxes, Image, Settings as SettingsIcon, Newspaper } from "luc
 import TitleBar from "./components/TitleBar";
 import Home from "./pages/Home";
 import Placeholder from "./pages/Placeholder";
+import { Session } from "./auth";
 import { APP_VERSION } from "./version";
 
 type Tab = "play" | "mods" | "screenshots" | "news" | "settings";
@@ -17,6 +18,7 @@ const NAV: { id: Tab; label: string; icon: typeof Gamepad2 }[] = [
 
 export default function App() {
   const [tab, setTab] = useState<Tab>("play");
+  const [session, setSession] = useState<Session | null>(null);
 
   return (
     <div className="flex h-full flex-col bg-pb-bg">
@@ -45,9 +47,10 @@ export default function App() {
           <div className="px-3 pb-1 text-xs text-pb-muted">Launcher v{APP_VERSION}</div>
         </nav>
         <main className="min-w-0 flex-1 overflow-y-auto p-8">
-          {tab === "play" ? <Home /> : <Placeholder title={NAV.find((n) => n.id === tab)!.label} />}
+          {tab === "play" ? <Home session={session} onSession={setSession} /> : <Placeholder title={NAV.find((n) => n.id === tab)!.label} />}
         </main>
       </div>
     </div>
   );
 }
+

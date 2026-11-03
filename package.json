@@ -1,6 +1,6 @@
 {
   "name": "pb-launcher",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Official PETABLOCKS Minecraft Launcher",
   "private": true,
   "type": "module",
@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@tauri-apps/api": "^2.0.0",
+    "@tauri-apps/plugin-opener": "^2.7.2",
     "lucide-react": "^0.468.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0"
@@ -27,3 +28,4 @@
     "vite": "^6.0.0"
   }
 }
+

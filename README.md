@@ -1,11 +1,11 @@
 # PETABLOCKS Launcher
 
-**Version**: `v0.1.0` - Official Minecraft launcher for the [PETABLOCKS](https://petablocks.com) network.
+**Version**: `v0.2.0` - Official Minecraft launcher for the [PETABLOCKS](https://petablocks.com) network.
 
 Built with Tauri v2 (Rust) + React 19 + TypeScript + Tailwind CSS v4, using the official `petablocks-brand` design tokens.
 
 ## Status
-Phase 1 (scaffold and branded shell) is complete. Authentication, modpack sync, Java management and game launch come in later phases.
+Phases 1-2 (scaffold, branded shell, Microsoft sign-in) are complete. Modpack sync, Java management and game launch come in later phases.
 
 ## Season 2 instance
 | Property | Value |
@@ -26,7 +26,19 @@ npm run tauri build   # build the Windows installer
 
 ## Roadmap
 1. Scaffold and brand shell (done)
-2. Microsoft device code login
+2. Microsoft device code login (done)
 3. Manifest sync from GitHub Releases
 4. Java 21 and NeoForge launch engine
 5. Server ping, Discord Rich Presence, screenshots, crash reports
+
+
+## Microsoft sign-in
+Uses the Microsoft device code flow (Xbox Live, XSTS, Minecraft services). The refresh token and cached profile are stored in the Windows Credential Manager; if the network is unavailable the cached account is shown in offline mode.
+
+Requires an Azure AD app registration (public client, "Personal Microsoft accounts only", device code flow enabled). Provide its Application (client) ID via the `PB_LAUNCHER_CLIENT_ID` environment variable at runtime or build time:
+
+```powershell
+$env:PB_LAUNCHER_CLIENT_ID = "<client-id>"; npm run tauri dev
+```
+
+Note: Minecraft services only accept tokens from approved Azure apps; see https://aka.ms/AppRegInfo to request access.
