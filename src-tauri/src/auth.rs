@@ -184,7 +184,15 @@ async fn finish_login(client: &Client, ms_access: &str, refresh: &str) -> Result
         json!({"identityToken": format!("XBL3.0 x={uhs};{xsts_token}")}),
     )
     .await?;
-    let mc_token = mc["access_token"].as_str().ok_or("Minecraft authentication failed")?.to_string();
+    let Some(mc_token) = mc["access_token"].as_str().map(String::from) else {
+        let detail = mc["errorMessage"]
+            .as_str()
+            .or_else(|| mc["error"].as_str())
+            .unwrap_or("AppID pending Mojang approval");
+        return Err(format!(
+            "Microsoft & Xbox Live sign-in succeeded, but Minecraft Services rejected the token ({detail}). Your Azure AppID (acbc8721-204e-4445-8c3f-962fa445d718) is awaiting Mojang approval from the aka.ms/AppRegInfo form."
+        ));
+    };
 
     let profile_res = client
         .get("https://api.minecraftservices.com/minecraft/profile")

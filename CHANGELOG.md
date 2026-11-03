@@ -3,6 +3,11 @@
 All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.1] - 2026-11-03
+### Changed
+- **Minecraft Services Diagnostic (`src-tauri/src/auth.rs`)**:
+  - Updated `finish_login` to surface the exact `api.minecraftservices.com` error message and clarify when Microsoft + Xbox Live authentication succeeded while the Azure AppID (`acbc8721-204e-4445-8c3f-962fa445d718`) is awaiting Mojang approval via `aka.ms/AppRegInfo`.
+
 ## [1.1.0] - 2026-11-03
 ### Added
 - **Official Third-Party Brand SVGs (`src/components/BrandIcons.tsx`)**:
