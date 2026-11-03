@@ -3,6 +3,15 @@
 All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-11-03
+### Changed
+- **Branded Titlebar (`src/components/TitleBar.tsx`, `src/index.css`)**:
+  - Updated the window titlebar to display the full horizontal `PETABLOCKS` wordmark (`petablocks-logo-horizontal-256w.png`) followed by `LAUNCHER` in the official magenta-to-purple tagline gradient (`--pb-gradient-tagline`).
+- **Branded Windows NSIS Installer (`src-tauri/tauri.conf.json`, `src-tauri/nsis/`)**:
+  - Added custom dark-themed PETABLOCKS NSIS `header.bmp` (150×57) and `sidebar.bmp` (164×314) with the stacked logo, purple/cyan accent borders, and official `.ico` installer icon.
+- **Disk Usage & Build Artifact Hygiene (`src-tauri/src/updater.rs`)**:
+  - Automatically purges stale update installers in `%APPDATA%/PETABLOCKS Launcher/updates/` before downloading a new release, and cleans old `.mrpack`/`.zip`/`.exe` build artifacts on disk.
+
 ## [1.2.1] - 2026-11-03
 ### Fixed
 - **Public GitHub Releases Manifest & Override Hosting (`src-tauri/src/sync.rs`, `src/instances.ts`)**:

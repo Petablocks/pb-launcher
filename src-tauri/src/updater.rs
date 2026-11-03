@@ -119,6 +119,7 @@ pub async fn install_update(app: AppHandle, download_url: String, version: Strin
         .map_err(|e| format!("Failed reading installer bytes: {e}"))?;
 
     let updates_dir = launcher_root().join("updates");
+    let _ = fs::remove_dir_all(&updates_dir);
     fs::create_dir_all(&updates_dir).map_err(|e| e.to_string())?;
     let installer_path = updates_dir.join(format!("PETABLOCKS-Launcher-{version}-setup.exe"));
 

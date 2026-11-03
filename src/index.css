@@ -47,4 +47,9 @@ body {
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
 }
+.pb-text-gradient-purple {
+  background: var(--pb-gradient-tagline);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
 .pb-glow { box-shadow: 0 0 24px rgba(15, 205, 248, 0.35); }
