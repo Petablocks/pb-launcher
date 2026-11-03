@@ -3,6 +3,11 @@
 All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.1] - 2026-11-03
+### Fixed
+- **Public GitHub Releases Manifest & Override Hosting (`src-tauri/src/sync.rs`, `src/instances.ts`)**:
+  - Because `Petablocks/petablocks-modpack-s2` is a private repository (returning HTTP 404 to unauthenticated clients), attached `launcher-manifest.json` and `PETABLOCKS-Season-2-0.18.0.mrpack` to the public `Petablocks/pb-launcher` releases and updated `sync.rs` to resolve from `Petablocks/pb-launcher` releases first.
+
 ## [1.2.0] - 2026-11-03
 ### Added
 - **In-App Auto-Updater (`src-tauri/src/updater.rs`, `src/App.tsx`)**:

@@ -108,36 +108,44 @@ pub fn save_state(instance_id: &str, state: &InstanceState) -> Result<(), String
 
 pub async fn fetch_manifest(instance_id: &str, manifest_url: &str) -> Result<LauncherManifest, String> {
     let client = http();
-    match client.get(manifest_url).send().await {
-        Ok(res) if res.status().is_success() => {
-            let text = res.text().await.map_err(|e| e.to_string())?;
-            let manifest: LauncherManifest = serde_json::from_str(&text).map_err(|e| e.to_string())?;
-            let dir = instance_dir(instance_id);
-            let _ = fs::create_dir_all(&dir);
-            let _ = fs::write(cached_manifest_path(instance_id), &text);
-            Ok(manifest)
-        }
-        _ => {
-            // Fallback to cached local manifest or local sibling repo for offline/dev testing
-            let cached = cached_manifest_path(instance_id);
-            if let Ok(text) = fs::read_to_string(&cached) {
-                if let Ok(m) = serde_json::from_str(&text) {
-                    return Ok(m);
+    let candidate_urls = [
+        manifest_url.to_string(),
+        "https://github.com/Petablocks/pb-launcher/releases/latest/download/launcher-manifest.json".to_string(),
+        "https://github.com/Petablocks/petablocks-modpack-s2/releases/latest/download/launcher-manifest.json".to_string(),
+    ];
+
+    for url in &candidate_urls {
+        if let Ok(res) = client.get(url).send().await {
+            if res.status().is_success() {
+                if let Ok(text) = res.text().await {
+                    if let Ok(manifest) = serde_json::from_str::<LauncherManifest>(&text) {
+                        let dir = instance_dir(instance_id);
+                        let _ = fs::create_dir_all(&dir);
+                        let _ = fs::write(cached_manifest_path(instance_id), &text);
+                        return Ok(manifest);
+                    }
                 }
             }
-            // Local workspace fallback if developing alongside petablocks-modpack-s2
-            let dev_fallback = PathBuf::from(r"c:\Users\michael\Documents\GitHub\petablocks-modpack-s2\dist\launcher-manifest.json");
-            if let Ok(text) = fs::read_to_string(&dev_fallback) {
-                if let Ok(m) = serde_json::from_str::<LauncherManifest>(&text) {
-                    let dir = instance_dir(instance_id);
-                    let _ = fs::create_dir_all(&dir);
-                    let _ = fs::write(&cached, &text);
-                    return Ok(m);
-                }
-            }
-            Err("Unable to fetch modpack manifest from GitHub Releases (and no local cache found).".into())
         }
     }
+
+    // Fallback to cached local manifest or local sibling repo for offline/dev testing
+    let cached = cached_manifest_path(instance_id);
+    if let Ok(text) = fs::read_to_string(&cached) {
+        if let Ok(m) = serde_json::from_str(&text) {
+            return Ok(m);
+        }
+    }
+    let dev_fallback = PathBuf::from(r"c:\Users\michael\Documents\GitHub\petablocks-modpack-s2\dist\launcher-manifest.json");
+    if let Ok(text) = fs::read_to_string(&dev_fallback) {
+        if let Ok(m) = serde_json::from_str::<LauncherManifest>(&text) {
+            let dir = instance_dir(instance_id);
+            let _ = fs::create_dir_all(&dir);
+            let _ = fs::write(&cached, &text);
+            return Ok(m);
+        }
+    }
+    Err("Unable to fetch modpack manifest from GitHub Releases (and no local cache found).".into())
 }
 
 fn sha1_file(path: &Path) -> Option<String> {
@@ -341,16 +349,37 @@ pub async fn sync_instance(
 
 async fn apply_mrpack_overrides(base_dir: &Path, manifest: &LauncherManifest) -> Result<(), String> {
     let client = http();
-    let mrpack_bytes = match client.get(&manifest.mrpack_url).send().await {
-        Ok(res) if res.status().is_success() => res.bytes().await.ok().map(|b| b.to_vec()),
-        _ => {
-            let local_mrpack = PathBuf::from(format!(
-                r"c:\Users\michael\Documents\GitHub\petablocks-modpack-s2\dist\PETABLOCKS-Season-2-{}.mrpack",
-                manifest.version
-            ));
-            fs::read(local_mrpack).ok()
+    let candidate_urls = [
+        manifest.mrpack_url.clone(),
+        format!(
+            "https://github.com/Petablocks/pb-launcher/releases/latest/download/PETABLOCKS-Season-2-{}.mrpack",
+            manifest.version
+        ),
+        format!(
+            "https://files.petablocks.com/modpacks/season2/PETABLOCKS-Season-2-{}.mrpack",
+            manifest.version
+        ),
+        "https://files.petablocks.com/modpacks/season2/PETABLOCKS-Season-2-latest.mrpack".to_string(),
+    ];
+
+    let mut mrpack_bytes: Option<Vec<u8>> = None;
+    for url in &candidate_urls {
+        if let Ok(res) = client.get(url).send().await {
+            if res.status().is_success() {
+                if let Ok(b) = res.bytes().await {
+                    mrpack_bytes = Some(b.to_vec());
+                    break;
+                }
+            }
         }
-    };
+    }
+    if mrpack_bytes.is_none() {
+        let local_mrpack = PathBuf::from(format!(
+            r"c:\Users\michael\Documents\GitHub\petablocks-modpack-s2\dist\PETABLOCKS-Season-2-{}.mrpack",
+            manifest.version
+        ));
+        mrpack_bytes = fs::read(local_mrpack).ok();
+    }
 
     let Some(bytes) = mrpack_bytes else {
         return Ok(());

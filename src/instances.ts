@@ -17,6 +17,6 @@ export const INSTANCES: Instance[] = [
     neoforgeVersion: "21.1.259",
     loader: "NeoForge 21.1.259",
     manifestUrl:
-      "https://github.com/Petablocks/petablocks-modpack-s2/releases/latest/download/launcher-manifest.json",
+      "https://github.com/Petablocks/pb-launcher/releases/latest/download/launcher-manifest.json",
   },
 ];
