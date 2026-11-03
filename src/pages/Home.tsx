@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { CheckCircle2, DownloadCloud, Loader2, Play } from "lucide-react";
+import { CheckCircle2, DownloadCloud, Loader2, Play, Terminal } from "lucide-react";
 import { INSTANCES } from "../instances";
 import AccountCard from "../components/AccountCard";
 import { Session, inTauri } from "../auth";
@@ -12,6 +12,13 @@ import {
   onSyncProgress,
   syncInstance,
 } from "../sync";
+import {
+  GameLogLine,
+  launchInstance,
+  onGameLog,
+  onGameState,
+  onLaunchStatus,
+} from "../launch";
 import logo from "../assets/petablocks-logo-horizontal-512w.png";
 
 interface Props {
@@ -30,6 +37,12 @@ export default function Home({ session, onSession }: Props) {
   const [progress, setProgress] = useState<SyncProgress | null>(null);
   const [syncError, setSyncError] = useState<string | null>(null);
 
+  const [launching, setLaunching] = useState(false);
+  const [gameRunning, setGameRunning] = useState(false);
+  const [launchStatus, setLaunchStatus] = useState<string | null>(null);
+  const [logs, setLogs] = useState<GameLogLine[]>([]);
+  const [showLogs, setShowLogs] = useState(false);
+
   useEffect(() => {
     getSyncState(instance.id).then(setSyncState).catch(() => {});
     if (inTauri) {
@@ -37,14 +50,27 @@ export default function Home({ session, onSession }: Props) {
         .then(setManifest)
         .catch(() => {});
     }
-    let unlisten: (() => void) | undefined;
+    const unlisteners: (() => void)[] = [];
     onSyncProgress((p) => {
       if (p.instanceId === instance.id) setProgress(p);
-    }).then((u) => {
-      unlisten = u;
-    });
+    }).then((u) => unlisteners.push(u));
+    onLaunchStatus((s) => setLaunchStatus(s)).then((u) => unlisteners.push(u));
+    onGameState((st) => {
+      if (st === "running") {
+        setGameRunning(true);
+        setLaunching(false);
+      } else if (st.startsWith("stopped")) {
+        setGameRunning(false);
+        setLaunching(false);
+        setLaunchStatus(null);
+      }
+    }).then((u) => unlisteners.push(u));
+    onGameLog((entry) => {
+      setLogs((prev) => [...prev.slice(-299), entry]);
+    }).then((u) => unlisteners.push(u));
+
     return () => {
-      if (unlisten) unlisten();
+      unlisteners.forEach((u) => u());
     };
   }, [instance.id, instance.manifestUrl]);
 
@@ -58,6 +84,32 @@ export default function Home({ session, onSession }: Props) {
       setSyncError(String(e));
     } finally {
       setSyncing(false);
+    }
+  }
+
+  async function handlePlay() {
+    if (!session || session.offline || !session.access_token) return;
+    setSyncError(null);
+    setLaunching(true);
+    setLogs([]);
+    try {
+      // Automatically sync modpack if not yet synced or out of date
+      if (!isUpToDate) {
+        setLaunchStatus("Syncing modpack files before launch...");
+        const next = await syncInstance(instance.id, instance.manifestUrl);
+        setSyncState(next);
+      }
+      await launchInstance({
+        instanceId: instance.id,
+        minecraftVersion: instance.minecraftVersion,
+        neoforgeVersion: manifest?.neoforge ?? instance.neoforgeVersion,
+        serverAddress: instance.serverAddress,
+        session,
+      });
+    } catch (e) {
+      setSyncError(String(e));
+      setLaunching(false);
+      setLaunchStatus(null);
     }
   }
 
@@ -103,8 +155,28 @@ export default function Home({ session, onSession }: Props) {
 
           <div className="mt-8 flex flex-wrap items-center gap-3">
             <button
+              onClick={handlePlay}
+              disabled={!verifiedOnlineSession || syncing || launching || gameRunning}
+              className="pb-glow inline-flex cursor-pointer items-center gap-2.5 rounded-xl bg-pb-cyan px-8 py-3 text-lg font-extrabold text-[#031617] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {launching ? (
+                <>
+                  <Loader2 size={20} className="animate-spin" /> Launching...
+                </>
+              ) : gameRunning ? (
+                <>
+                  <CheckCircle2 size={20} /> Game Running
+                </>
+              ) : (
+                <>
+                  <Play size={20} fill="currentColor" /> Play
+                </>
+              )}
+            </button>
+
+            <button
               onClick={handleSync}
-              disabled={syncing || !inTauri}
+              disabled={syncing || launching || gameRunning || !inTauri}
               className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-pb-cyan/40 bg-pb-cyan/15 px-5 py-3 text-sm font-extrabold text-pb-cyan transition hover:bg-pb-cyan/25 disabled:opacity-50"
             >
               {syncing ? (
@@ -113,24 +185,26 @@ export default function Home({ session, onSession }: Props) {
                 </>
               ) : isUpToDate ? (
                 <>
-                  <CheckCircle2 size={18} className="text-pb-mint" /> Verify / Sync (v{syncState.installedVersion})
+                  <CheckCircle2 size={18} className="text-pb-mint" /> Synced (v{syncState.installedVersion})
                 </>
               ) : (
                 <>
                   <DownloadCloud size={18} />{" "}
                   {syncState.installedVersion
                     ? `Update to v${latestVersion ?? "latest"}`
-                    : "Install / Sync Modpack"}
+                    : "Sync Modpack"}
                 </>
               )}
             </button>
 
-            <button
-              disabled={!verifiedOnlineSession || !isUpToDate || syncing}
-              className="pb-glow inline-flex items-center gap-2 rounded-xl bg-pb-cyan px-8 py-3 text-lg font-extrabold text-[#031617] disabled:opacity-50"
-            >
-              <Play size={20} fill="currentColor" /> Play
-            </button>
+            {logs.length > 0 && (
+              <button
+                onClick={() => setShowLogs(!showLogs)}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-xs font-bold text-pb-muted hover:text-white"
+              >
+                <Terminal size={15} /> {showLogs ? "Hide Logs" : "Game Logs"}
+              </button>
+            )}
           </div>
 
           {syncing && progress && (
@@ -148,17 +222,41 @@ export default function Home({ session, onSession }: Props) {
             </div>
           )}
 
+          {launchStatus && (
+            <p className="mt-4 flex items-center gap-2 text-xs font-semibold text-pb-cyan">
+              <Loader2 size={13} className="animate-spin" /> {launchStatus}
+            </p>
+          )}
+
           {syncError && <p className="mt-3 text-xs text-red-400">{syncError}</p>}
 
           <p className="mt-3 text-xs text-pb-muted">
             {!verifiedOnlineSession
               ? "Sign in with a verified Microsoft account owning Minecraft: Java Edition to enable Play."
-              : !isUpToDate
-              ? "Sync the Season 2 modpack first, then launch (Phase 4 launch engine next)."
-              : "Modpack verified & ready. Game launch engine arrives in Phase 4."}
+              : gameRunning
+              ? `Connected to ${instance.name}. Have fun!`
+              : "Ready to launch Minecraft 1.21.1 (NeoForge) and connect to s2.petablocks.com."}
           </p>
         </div>
       </section>
+
+      {showLogs && logs.length > 0 && (
+        <section className="mt-6 rounded-2xl border border-white/10 bg-pb-card p-4">
+          <div className="mb-2 flex items-center justify-between text-xs font-bold text-pb-muted">
+            <span>Live Game Output ({logs.length} lines)</span>
+            <button onClick={() => setLogs([])} className="hover:text-white">
+              Clear
+            </button>
+          </div>
+          <div className="max-h-56 overflow-y-auto rounded-xl bg-pb-bg p-3 font-mono text-[11px] leading-relaxed">
+            {logs.map((l, idx) => (
+              <div key={idx} className={l.isError ? "text-red-400" : "text-pb-muted"}>
+                {l.line}
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       <AccountCard session={session} onSession={onSession} />
     </div>

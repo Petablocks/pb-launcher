@@ -3,6 +3,19 @@
 All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-11-03
+### Added
+- **Adoptium Java 21 Manager (`src-tauri/src/java.rs`)**:
+  - Automatic detection of Java 21+ across custom path, launcher-managed runtime, `JAVA_HOME`, and standard Windows JDK directories.
+  - On-demand download and extraction of Eclipse Adoptium OpenJDK 21 JRE into `runtime/java-21/`.
+- **NeoForge 21.1.259 & Minecraft 1.21.1 Launch Engine (`src-tauri/src/launch.rs`)**:
+  - Enforces Mojang AppID policy: verifies online session and valid access token before spawning the game.
+  - Resolves Mojang `version_manifest_v2.json`, vanilla client jar, libraries, and asset objects in parallel.
+  - Runs `neoforge-21.1.259-installer.jar --installClient` automatically on first launch and builds the merged NeoForge + vanilla classpath and module args.
+  - Supports `--quickPlayMultiplayer s2.petablocks.com:25565` direct connection and streams stdout/stderr logs to the UI in real time.
+- **Settings Page (`src/pages/Settings.tsx`)**:
+  - RAM allocation slider (`3 GB` – `16 GB`, default `6 GB`), custom `java.exe` override, JVM flags, and auto-connect toggle.
+
 ## [0.3.0] - 2026-11-03
 ### Added
 - **Manifest & Differential Sync Engine (`src-tauri/src/sync.rs`)**:

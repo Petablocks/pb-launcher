@@ -21,7 +21,7 @@ fn client_id() -> Result<String, String> {
         .unwrap_or_else(|| DEFAULT_CLIENT_ID.to_string()))
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Profile {
     pub uuid: String,
     pub name: String,
@@ -44,7 +44,7 @@ pub struct DeviceCodeInfo {
 }
 
 /// Result returned to the UI. `access_token` is the Minecraft services token used at launch.
-#[derive(Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Session {
     pub profile: Profile,
     pub access_token: String,

@@ -1,7 +1,13 @@
 mod auth;
+mod java;
+mod launch;
+mod settings;
 mod sync;
 
 use auth::{DeviceCodeInfo, Session};
+use java::JavaStatus;
+use launch::LaunchRequest;
+use settings::LauncherSettings;
 use sync::{CustomModFile, InstanceState, LauncherManifest};
 use tauri::AppHandle;
 
@@ -55,6 +61,39 @@ fn sync_custom_mods_dir(instance_id: String) -> Result<String, String> {
     sync::open_custom_mods_dir(&instance_id)
 }
 
+#[tauri::command]
+fn settings_get() -> LauncherSettings {
+    settings::load_settings()
+}
+
+#[tauri::command]
+fn settings_save(settings: LauncherSettings) -> Result<(), String> {
+    settings::save_settings(&settings)
+}
+
+#[tauri::command]
+fn java_detect() -> JavaStatus {
+    java::detect_java()
+}
+
+#[tauri::command]
+async fn java_install(app: AppHandle) -> Result<JavaStatus, String> {
+    java::ensure_java_21(&app).await?;
+    Ok(java::detect_java())
+}
+
+#[tauri::command]
+async fn launch_instance(app: AppHandle, req: LaunchRequest) -> Result<(), String> {
+    launch::launch_game(app, req).await
+}
+
+#[tauri::command]
+fn open_instance_dir(instance_id: String) -> Result<String, String> {
+    let dir = sync::instance_dir(&instance_id);
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    Ok(dir.to_string_lossy().to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -69,7 +108,13 @@ pub fn run() {
             sync_set_mod_enabled,
             sync_instance,
             sync_list_custom_mods,
-            sync_custom_mods_dir
+            sync_custom_mods_dir,
+            settings_get,
+            settings_save,
+            java_detect,
+            java_install,
+            launch_instance,
+            open_instance_dir
         ])
         .run(tauri::generate_context!())
         .expect("error while running PETABLOCKS Launcher");
