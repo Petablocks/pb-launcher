@@ -97,7 +97,7 @@ export default function AccountCard({ session, onSession }: Props) {
       {device ? (
         <div className="text-center">
           <p className="text-sm text-pb-muted">Enter this code at {device.verification_uri}</p>
-          <div className="my-3 text-4xl font-extrabold tracking-[0.3em] pb-text-gradient select-text">{device.user_code}</div>
+          <div className="font-minecraft my-3 text-4xl tracking-[0.25em] pb-text-gradient select-text">{device.user_code}</div>
           <div className="flex justify-center gap-2">
             <button onClick={() => navigator.clipboard.writeText(device.user_code)} className="flex items-center gap-2 rounded-lg bg-white/5 px-3 py-2 text-sm hover:bg-white/10">
               <Copy size={14} /> Copy code

@@ -3,6 +3,11 @@
 All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0] - 2026-11-03
+### Added
+- **Official `Minecraft Ten` Display Font (`public/assets/fonts/minecraft-ten.ttf`, `src/index.css`)**:
+  - Bundled `minecraft-ten.ttf` from `petablocks-website` and applied `Minecraft Ten` across all `h1`/`h2` headings, the `LAUNCHER` titlebar badge, the `Play` button, and the Microsoft device code display (`Inter` + `JetBrains Mono` for body and logs, matching `petablocks-website`).
+
 ## [1.3.0] - 2026-11-03
 ### Changed
 - **Branded Titlebar (`src/components/TitleBar.tsx`, `src/index.css`)**:

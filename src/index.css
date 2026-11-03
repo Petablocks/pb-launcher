@@ -1,7 +1,15 @@
-@import url("https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap");
 @import "tailwindcss";
 
-/* PETABLOCKS brand tokens (source: petablocks-brand/tokens/theme.css, tokens.css) */
+@font-face {
+  font-family: "Minecraft Ten";
+  src: url("/assets/fonts/minecraft-ten.ttf") format("truetype");
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* PETABLOCKS brand tokens (source: petablocks-brand & petablocks-website) */
 :root {
   --pb-cyan: #0FCDF8;
   --pb-mint: #8BFAA3;
@@ -16,6 +24,7 @@
   --pb-muted: #9CA3AF;
   --pb-gradient: linear-gradient(135deg, #0FCDF8 0%, #8BFAA3 100%);
   --pb-gradient-tagline: linear-gradient(135deg, #E040FB 0%, #A824FF 100%);
+  --font-minecraft: "Minecraft Ten", monospace;
   color-scheme: dark;
 }
 
@@ -28,7 +37,9 @@
   --color-pb-card: #111827;
   --color-pb-elevated: #1F2937;
   --color-pb-muted: #9CA3AF;
-  --font-sans: "Plus Jakarta Sans", "Inter", system-ui, -apple-system, sans-serif;
+  --font-sans: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
+  --font-minecraft: "Minecraft Ten", monospace;
 }
 
 html, body, #root { height: 100%; margin: 0; }
@@ -38,6 +49,17 @@ body {
   font-family: var(--font-sans);
   overflow: hidden;
   user-select: none;
+  -webkit-font-smoothing: antialiased;
+}
+h1, h2 {
+  font-family: "Minecraft Ten", monospace;
+  letter-spacing: 0.05em;
+  font-weight: normal;
+  text-transform: uppercase;
+}
+.font-minecraft {
+  font-family: "Minecraft Ten", monospace;
+  letter-spacing: 0.05em;
 }
 ::-webkit-scrollbar { width: 8px; }
 ::-webkit-scrollbar-thumb { background: var(--pb-elevated); border-radius: 4px; }

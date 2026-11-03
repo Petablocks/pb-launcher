@@ -250,7 +250,7 @@ export default function Home({ session, onSession }: Props) {
             <button
               onClick={handlePlay}
               disabled={!verifiedOnlineSession || syncing || launching || gameRunning}
-              className="pb-glow inline-flex cursor-pointer items-center gap-2.5 rounded-xl bg-pb-cyan px-8 py-3 text-lg font-extrabold text-[#031617] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
+              className="pb-glow font-minecraft inline-flex cursor-pointer items-center gap-2.5 rounded-xl bg-pb-cyan px-8 py-3 text-xl tracking-wider text-[#031617] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {launching ? (
                 <>

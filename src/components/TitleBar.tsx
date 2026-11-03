@@ -20,7 +20,7 @@ export default function TitleBar() {
         />
         <span
           data-tauri-drag-region
-          className="text-xs font-extrabold tracking-[0.22em] pb-text-gradient-purple"
+          className="font-minecraft text-sm tracking-[0.18em] pb-text-gradient-purple"
         >
           LAUNCHER
         </span>
