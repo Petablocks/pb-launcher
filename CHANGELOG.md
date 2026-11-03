@@ -3,6 +3,11 @@
 All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.1] - 2026-11-03
+### Fixed
+- **Vite File Watcher on Windows (`vite.config.ts`)**:
+  - Added `watch: { ignored: ["**/src-tauri/**"] }` to `vite.config.ts` to prevent `EBUSY: resource busy or locked` crashes on `src-tauri/target/debug/deps/pb_launcher_lib.dll` during `npm run tauri dev`.
+
 ## [1.0.0] - 2026-11-03
 ### Added
 - **Native Minecraft Server List Ping (`src-tauri/src/ping.rs`)**:
