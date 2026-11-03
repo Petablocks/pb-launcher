@@ -1,6 +1,9 @@
 mod auth;
+mod sync;
 
 use auth::{DeviceCodeInfo, Session};
+use sync::{CustomModFile, InstanceState, LauncherManifest};
+use tauri::AppHandle;
 
 #[tauri::command]
 async fn auth_start_login() -> Result<DeviceCodeInfo, String> {
@@ -22,6 +25,36 @@ fn auth_logout() -> Result<(), String> {
     auth::logout()
 }
 
+#[tauri::command]
+async fn sync_get_manifest(instance_id: String, manifest_url: String) -> Result<LauncherManifest, String> {
+    sync::fetch_manifest(&instance_id, &manifest_url).await
+}
+
+#[tauri::command]
+fn sync_get_state(instance_id: String) -> InstanceState {
+    sync::load_state(&instance_id)
+}
+
+#[tauri::command]
+fn sync_set_mod_enabled(instance_id: String, slug: String, enabled: bool) -> Result<InstanceState, String> {
+    sync::set_mod_enabled(&instance_id, &slug, enabled)
+}
+
+#[tauri::command]
+async fn sync_instance(app: AppHandle, instance_id: String, manifest_url: String) -> Result<InstanceState, String> {
+    sync::sync_instance(app, instance_id, manifest_url).await
+}
+
+#[tauri::command]
+fn sync_list_custom_mods(instance_id: String) -> Result<Vec<CustomModFile>, String> {
+    sync::list_custom_mods(&instance_id)
+}
+
+#[tauri::command]
+fn sync_custom_mods_dir(instance_id: String) -> Result<String, String> {
+    sync::open_custom_mods_dir(&instance_id)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -30,7 +63,13 @@ pub fn run() {
             auth_start_login,
             auth_complete_login,
             auth_restore,
-            auth_logout
+            auth_logout,
+            sync_get_manifest,
+            sync_get_state,
+            sync_set_mod_enabled,
+            sync_instance,
+            sync_list_custom_mods,
+            sync_custom_mods_dir
         ])
         .run(tauri::generate_context!())
         .expect("error while running PETABLOCKS Launcher");

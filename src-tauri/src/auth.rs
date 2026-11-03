@@ -9,13 +9,16 @@ const DEVICE_CODE_URL: &str = "https://login.microsoftonline.com/consumers/oauth
 const TOKEN_URL: &str = "https://login.microsoftonline.com/consumers/oauth2/v2.0/token";
 const SCOPE: &str = "XboxLive.signin offline_access";
 
-/// Azure AD application (client) ID. Set `PB_LAUNCHER_CLIENT_ID` at runtime or build time.
+const DEFAULT_CLIENT_ID: &str = "acbc8721-204e-4445-8c3f-962fa445d718";
+
+/// Azure AD application (client) ID. Reads `PB_LAUNCHER_CLIENT_ID` at runtime or build time,
+/// falling back to the official PETABLOCKS Launcher registration.
 fn client_id() -> Result<String, String> {
-    std::env::var("PB_LAUNCHER_CLIENT_ID")
+    Ok(std::env::var("PB_LAUNCHER_CLIENT_ID")
         .ok()
         .or_else(|| option_env!("PB_LAUNCHER_CLIENT_ID").map(String::from))
         .filter(|s| !s.trim().is_empty())
-        .ok_or_else(|| "Microsoft Client ID not configured (set PB_LAUNCHER_CLIENT_ID).".to_string())
+        .unwrap_or_else(|| DEFAULT_CLIENT_ID.to_string()))
 }
 
 #[derive(Serialize, Deserialize, Clone)]

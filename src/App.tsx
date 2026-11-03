@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Gamepad2, Boxes, Image, Settings as SettingsIcon, Newspaper } from "lucide-react";
 import TitleBar from "./components/TitleBar";
 import Home from "./pages/Home";
+import Mods from "./pages/Mods";
 import Placeholder from "./pages/Placeholder";
 import { Session } from "./auth";
 import { APP_VERSION } from "./version";
@@ -47,7 +48,13 @@ export default function App() {
           <div className="px-3 pb-1 text-xs text-pb-muted">Launcher v{APP_VERSION}</div>
         </nav>
         <main className="min-w-0 flex-1 overflow-y-auto p-8">
-          {tab === "play" ? <Home session={session} onSession={setSession} /> : <Placeholder title={NAV.find((n) => n.id === tab)!.label} />}
+          {tab === "play" ? (
+            <Home session={session} onSession={setSession} />
+          ) : tab === "mods" ? (
+            <Mods />
+          ) : (
+            <Placeholder title={NAV.find((n) => n.id === tab)!.label} />
+          )}
         </main>
       </div>
     </div>

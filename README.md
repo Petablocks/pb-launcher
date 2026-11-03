@@ -1,11 +1,11 @@
 # PETABLOCKS Launcher
 
-**Version**: `v0.2.0` - Official Minecraft launcher for the [PETABLOCKS](https://petablocks.com) network.
+**Version**: `v0.3.0` - Official Minecraft launcher for the [PETABLOCKS](https://petablocks.com) network.
 
 Built with Tauri v2 (Rust) + React 19 + TypeScript + Tailwind CSS v4, using the official `petablocks-brand` design tokens.
 
 ## Status
-Phases 1-2 (scaffold, branded shell, Microsoft sign-in) are complete. Modpack sync, Java management and game launch come in later phases.
+Phases 1-3 (scaffold, branded shell, Microsoft sign-in, and GitHub Releases manifest sync engine with optional mod toggles) are complete. Java 21 management and game launch come in Phase 4.
 
 ## Season 2 instance
 | Property | Value |
@@ -27,7 +27,7 @@ npm run tauri build   # build the Windows installer
 ## Roadmap
 1. Scaffold and brand shell (done)
 2. Microsoft device code login (done)
-3. Manifest sync from GitHub Releases
+3. Manifest sync from GitHub Releases (done)
 4. Java 21 and NeoForge launch engine
 5. Server ping, Discord Rich Presence, screenshots, crash reports
 
