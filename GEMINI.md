@@ -58,4 +58,10 @@ Whenever making changes to any application, service, repository, or component in
 - Before running any `wrangler` command, verify the active account by running `npx wrangler whoami` or checking `account_id` in `wrangler.toml` / `wrangler.jsonc`.
 - Always execute wrangler commands from within the target service's directory (or pass `--config <path>/wrangler.toml` and `--profile <profile-name>`) so directory-bound credentials and `account_id` are respected.
 
+---
+
+## 6. Third-Party Brand Icons & Logos (`TheSVG.org`)
+- Whenever referencing or displaying third-party services (e.g., **Microsoft**, **GitHub**, **Discord**, **Modrinth**, **CurseForge**, **Adoptium**, **Cloudflare**), **ALWAYS** use their official brand SVG vector marks from [TheSVG.org](https://thesvg.org) (stored in `src/components/BrandIcons.tsx` or `src/assets/brands/`) rather than generic Lucide placeholder icons.
+
+
 

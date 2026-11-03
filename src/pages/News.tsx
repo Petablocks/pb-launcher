@@ -1,5 +1,6 @@
-import { ExternalLink, Globe, Map, MessageSquare, Sparkles } from "lucide-react";
+import { ExternalLink, Globe, Map, Sparkles } from "lucide-react";
 import { openUrl } from "@tauri-apps/plugin-opener";
+import { GitHubLogo } from "../components/BrandIcons";
 
 const UPDATES = [
   {
@@ -27,7 +28,7 @@ const UPDATES = [
 const LINKS = [
   { label: "PETABLOCKS Website", url: "https://petablocks.com", icon: Globe },
   { label: "Live World Map", url: "https://map.petablocks.com", icon: Map },
-  { label: "Modpack Repository", url: "https://github.com/Petablocks/petablocks-modpack-s2", icon: MessageSquare },
+  { label: "Modpack on GitHub", url: "https://github.com/Petablocks/petablocks-modpack-s2", icon: GitHubLogo },
 ];
 
 export default function News() {

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Copy, ExternalLink, LogOut, UserRound, Loader2, WifiOff } from "lucide-react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { DeviceCodeInfo, Session, avatarUrl, completeLogin, inTauri, logout, restoreSession, startLogin } from "../auth";
+import { MicrosoftLogo } from "./BrandIcons";
 
 interface Props {
   session: Session | null;
@@ -72,8 +73,16 @@ export default function AccountCard({ session, onSession }: Props) {
         <img src={avatarUrl(session.profile.uuid)} alt="" className="h-10 w-10 rounded-md" draggable={false} />
         <div className="min-w-0 flex-1">
           <div className="truncate font-bold">{session.profile.name}</div>
-          <div className="flex items-center gap-1 text-xs text-pb-muted">
-            {session.offline ? (<><WifiOff size={12} /> Offline - cached account</>) : "Signed in with Microsoft"}
+          <div className="flex items-center gap-1.5 text-xs text-pb-muted">
+            {session.offline ? (
+              <>
+                <WifiOff size={12} /> Offline - cached account
+              </>
+            ) : (
+              <>
+                <MicrosoftLogo size={12} /> Signed in with Microsoft
+              </>
+            )}
           </div>
         </div>
         <button onClick={signOut} className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-pb-muted hover:bg-white/5 hover:text-white">
@@ -109,8 +118,9 @@ export default function AccountCard({ session, onSession }: Props) {
           <button
             onClick={signIn}
             disabled={busy || !inTauri}
-            className="rounded-lg bg-pb-cyan px-4 py-2 text-sm font-bold text-[#031617] hover:brightness-110 disabled:opacity-50"
+            className="inline-flex cursor-pointer items-center gap-2.5 rounded-lg bg-pb-cyan px-4 py-2 text-sm font-bold text-[#031617] hover:brightness-110 disabled:opacity-50"
           >
+            <MicrosoftLogo size={16} />
             Sign in with Microsoft
           </button>
         </div>

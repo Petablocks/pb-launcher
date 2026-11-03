@@ -14,6 +14,7 @@ import {
   setModEnabled,
 } from "../sync";
 import { inTauri } from "../auth";
+import { ModrinthLogo } from "../components/BrandIcons";
 
 export default function Mods() {
   const instance = INSTANCES[0];
@@ -201,6 +202,7 @@ export default function Mods() {
               >
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
+                    <ModrinthLogo size={14} className="shrink-0 text-[#00AF5C]" />
                     <span className="font-bold text-sm text-white">{m.slug}</span>
                     <span className="rounded-md bg-white/5 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-pb-muted">
                       {m.category}

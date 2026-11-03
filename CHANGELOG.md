@@ -3,6 +3,14 @@
 All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2026-11-03
+### Added
+- **Official Third-Party Brand SVGs (`src/components/BrandIcons.tsx`)**:
+  - Added official vector logos from [TheSVG.org](https://thesvg.org) for **Microsoft** (4-square color mark on the Sign In button and signed-in status), **GitHub** (News repository card), **Discord** (Settings webhook section), and **Modrinth** (Mod Manager entries).
+  - Codified Rule 6 in `GEMINI.md` requiring official brand SVGs from TheSVG.org for all third-party services.
+- **Entra Public Client Flow Diagnostic (`src-tauri/src/auth.rs`)**:
+  - Added clear guidance when Azure returns `AADSTS70002` (`The client application must be marked as 'mobile'`) explaining how to enable *Allow public client flows* in the Entra portal.
+
 ## [1.0.1] - 2026-11-03
 ### Fixed
 - **Vite File Watcher on Windows (`vite.config.ts`)**:

@@ -21,6 +21,7 @@ import {
   saveSettings,
 } from "../launch";
 import { inTauri } from "../auth";
+import { DiscordLogo } from "../components/BrandIcons";
 
 export default function Settings() {
   const instance = INSTANCES[0];
@@ -219,7 +220,8 @@ export default function Settings() {
         </div>
 
         <div>
-          <label className="block text-xs font-semibold text-pb-muted">
+          <label className="flex items-center gap-1.5 text-xs font-semibold text-pb-muted">
+            <DiscordLogo size={14} className="text-[#5865F2]" />
             Discord Crash Report Webhook URL (Optional)
           </label>
           <input

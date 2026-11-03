@@ -84,6 +84,9 @@ pub async fn start_device_login() -> Result<DeviceCodeInfo, String> {
         .await
         .map_err(|e| e.to_string())?;
     if let Some(err) = res.get("error_description").and_then(|v| v.as_str()) {
+        if err.contains("AADSTS70002") || err.contains("marked as 'mobile") {
+            return Err("Entra App config needed: In Azure Portal -> App registrations -> PETABLOCKS Launcher -> Authentication -> Set 'Allow public client flows' to Yes (and add a Mobile and desktop applications platform), then click Save.".into());
+        }
         return Err(err.to_string());
     }
     Ok(DeviceCodeInfo {
