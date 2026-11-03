@@ -1,12 +1,16 @@
 mod auth;
+mod community;
 mod java;
 mod launch;
+mod ping;
 mod settings;
 mod sync;
 
 use auth::{DeviceCodeInfo, Session};
+use community::{CrashReportInfo, ScreenshotItem};
 use java::JavaStatus;
 use launch::LaunchRequest;
+use ping::ServerStatus;
 use settings::LauncherSettings;
 use sync::{CustomModFile, InstanceState, LauncherManifest};
 use tauri::AppHandle;
@@ -94,8 +98,40 @@ fn open_instance_dir(instance_id: String) -> Result<String, String> {
     Ok(dir.to_string_lossy().to_string())
 }
 
+#[tauri::command]
+async fn server_ping(address: String) -> ServerStatus {
+    ping::ping_server(&address).await
+}
+
+#[tauri::command]
+fn screenshots_list(instance_id: String) -> Result<Vec<ScreenshotItem>, String> {
+    community::list_screenshots(&instance_id)
+}
+
+#[tauri::command]
+fn screenshots_dir(instance_id: String) -> Result<String, String> {
+    community::screenshots_dir(&instance_id)
+}
+
+#[tauri::command]
+fn crash_latest(instance_id: String) -> Option<CrashReportInfo> {
+    community::latest_crash_report(&instance_id)
+}
+
+#[tauri::command]
+async fn crash_submit_webhook(
+    webhook_url: String,
+    player_name: String,
+    instance_id: String,
+    summary: String,
+    log_snippet: String,
+) -> Result<(), String> {
+    community::submit_crash_webhook(&webhook_url, &player_name, &instance_id, &summary, &log_snippet).await
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    community::update_discord_rpc("In PETABLOCKS Launcher", "Ready to Play");
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
@@ -114,7 +150,12 @@ pub fn run() {
             java_detect,
             java_install,
             launch_instance,
-            open_instance_dir
+            open_instance_dir,
+            server_ping,
+            screenshots_list,
+            screenshots_dir,
+            crash_latest,
+            crash_submit_webhook
         ])
         .run(tauri::generate_context!())
         .expect("error while running PETABLOCKS Launcher");

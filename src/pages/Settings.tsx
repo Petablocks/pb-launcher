@@ -217,6 +217,24 @@ export default function Settings() {
             className="mt-1.5 w-full rounded-xl border border-white/10 bg-pb-bg px-3 py-2 font-mono text-xs text-white focus:border-pb-cyan focus:outline-none"
           />
         </div>
+
+        <div>
+          <label className="block text-xs font-semibold text-pb-muted">
+            Discord Crash Report Webhook URL (Optional)
+          </label>
+          <input
+            type="text"
+            value={settings.crashWebhookUrl ?? ""}
+            onChange={(e) =>
+              setSettings({
+                ...settings,
+                crashWebhookUrl: e.target.value.trim() ? e.target.value : null,
+              })
+            }
+            placeholder="https://discord.com/api/webhooks/... (for one-click crash report submission)"
+            className="mt-1.5 w-full rounded-xl border border-white/10 bg-pb-bg px-3 py-2 font-mono text-xs text-white placeholder-pb-muted/60 focus:border-pb-cyan focus:outline-none"
+          />
+        </div>
       </section>
 
       {/* Server Connection Options */}

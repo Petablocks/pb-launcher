@@ -3,6 +3,21 @@
 All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.0] - 2026-11-03
+### Added
+- **Native Minecraft Server List Ping (`src-tauri/src/ping.rs`)**:
+  - Direct TCP handshake & status request (`0x00`) to `s2.petablocks.com:25565`, displaying real-time latency (`ms`), online/max player count, and MOTD on the Home card.
+- **Discord Rich Presence (`src-tauri/src/community.rs`)**:
+  - Lightweight native Windows Discord IPC client (`\\.\pipe\discord-ipc-0`) updating player activity when in the launcher or connected to `s2.petablocks.com`.
+- **Screenshots Gallery (`src/pages/Screenshots.tsx`)**:
+  - Interactive gallery reading `<instance>/screenshots/*.png` with high-res preview and one-click folder/file opening.
+- **News & Release Notes (`src/pages/News.tsx`)**:
+  - Release notes feed and quick community links (Website, Live World Map, Modpack Repo).
+- **Crash Diagnostics & Discord Webhook Reporter (`src-tauri/src/community.rs`, `src/pages/Home.tsx`)**:
+  - Automatic detection of non-zero exit codes and `<instance>/crash-reports/` logs with one-click Copy or Discord Webhook submission.
+- **CI/CD Workflow (`.github/workflows/release.yml`)**:
+  - GitHub Actions workflow to build and publish signed Windows NSIS installers on version tags.
+
 ## [0.4.0] - 2026-11-03
 ### Added
 - **Adoptium Java 21 Manager (`src-tauri/src/java.rs`)**:

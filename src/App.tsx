@@ -3,8 +3,9 @@ import { Gamepad2, Boxes, Image, Settings as SettingsIcon, Newspaper } from "luc
 import TitleBar from "./components/TitleBar";
 import Home from "./pages/Home";
 import Mods from "./pages/Mods";
+import Screenshots from "./pages/Screenshots";
+import News from "./pages/News";
 import Settings from "./pages/Settings";
-import Placeholder from "./pages/Placeholder";
 import { Session } from "./auth";
 import { APP_VERSION } from "./version";
 
@@ -53,14 +54,15 @@ export default function App() {
             <Home session={session} onSession={setSession} />
           ) : tab === "mods" ? (
             <Mods />
-          ) : tab === "settings" ? (
-            <Settings />
+          ) : tab === "screenshots" ? (
+            <Screenshots />
+          ) : tab === "news" ? (
+            <News />
           ) : (
-            <Placeholder title={NAV.find((n) => n.id === tab)!.label} />
+            <Settings />
           )}
         </main>
       </div>
     </div>
   );
 }
-

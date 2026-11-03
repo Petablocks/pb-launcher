@@ -12,6 +12,8 @@ pub struct LauncherSettings {
     pub extra_jvm_args: String,
     pub close_on_launch: bool,
     pub direct_connect: bool,
+    #[serde(default)]
+    pub crash_webhook_url: Option<String>,
 }
 
 impl Default for LauncherSettings {
@@ -22,6 +24,7 @@ impl Default for LauncherSettings {
             extra_jvm_args: "-XX:+UseG1GC -XX:+ParallelRefProcEnabled -XX:MaxGCPauseMillis=200 -XX:+UnlockExperimentalVMOptions -XX:+DisableExplicitGC".into(),
             close_on_launch: false,
             direct_connect: true,
+            crash_webhook_url: None,
         }
     }
 }

@@ -1,11 +1,11 @@
 # PETABLOCKS Launcher
 
-**Version**: `v0.4.0` - Official Minecraft launcher for the [PETABLOCKS](https://petablocks.com) network.
+**Version**: `v1.0.0` - Official Minecraft launcher for the [PETABLOCKS](https://petablocks.com) network.
 
 Built with Tauri v2 (Rust) + React 19 + TypeScript + Tailwind CSS v4, using the official `petablocks-brand` design tokens.
 
 ## Status
-Phases 1-4 (scaffold, branded shell, Microsoft sign-in, GitHub Releases manifest sync engine, Adoptium Java 21 auto-installer, and NeoForge 21.1.259 launch engine) are complete. Server ping, Discord Rich Presence, screenshots gallery, and crash reporting arrive in Phase 5.
+All 5 phases (scaffold, branded shell, Microsoft sign-in, GitHub Releases manifest sync engine, Adoptium Java 21 auto-installer, NeoForge 21.1.259 launch engine, native TCP Server List Ping, Discord Rich Presence, Screenshots gallery, News feed, and Crash Report diagnostics) are complete.
 
 ## Season 2 instance
 | Property | Value |
@@ -29,7 +29,7 @@ npm run tauri build   # build the Windows installer
 2. Microsoft device code login (done)
 3. Manifest sync from GitHub Releases (done)
 4. Java 21 and NeoForge launch engine (done)
-5. Server ping, Discord Rich Presence, screenshots, crash reports
+5. Server ping, Discord Rich Presence, screenshots, crash reports (done)
 
 
 ## Microsoft sign-in

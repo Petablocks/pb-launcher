@@ -1,5 +1,15 @@
 import { useEffect, useState } from "react";
-import { CheckCircle2, DownloadCloud, Loader2, Play, Terminal } from "lucide-react";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  Copy,
+  DownloadCloud,
+  Loader2,
+  Play,
+  Send,
+  Terminal,
+  Users,
+} from "lucide-react";
 import { INSTANCES } from "../instances";
 import AccountCard from "../components/AccountCard";
 import { Session, inTauri } from "../auth";
@@ -14,11 +24,19 @@ import {
 } from "../sync";
 import {
   GameLogLine,
+  getSettings,
   launchInstance,
   onGameLog,
   onGameState,
   onLaunchStatus,
 } from "../launch";
+import {
+  CrashReportInfo,
+  ServerStatus,
+  getLatestCrashReport,
+  pingServer,
+  submitCrashWebhook,
+} from "../community";
 import logo from "../assets/petablocks-logo-horizontal-512w.png";
 
 interface Props {
@@ -43,13 +61,30 @@ export default function Home({ session, onSession }: Props) {
   const [logs, setLogs] = useState<GameLogLine[]>([]);
   const [showLogs, setShowLogs] = useState(false);
 
+  const [serverStatus, setServerStatus] = useState<ServerStatus | null>(null);
+  const [crashReport, setCrashReport] = useState<CrashReportInfo | null>(null);
+  const [sendingCrash, setSendingCrash] = useState(false);
+  const [crashSent, setCrashSent] = useState(false);
+
   useEffect(() => {
     getSyncState(instance.id).then(setSyncState).catch(() => {});
     if (inTauri) {
       getManifest(instance.id, instance.manifestUrl)
         .then(setManifest)
         .catch(() => {});
+      pingServer(instance.serverAddress)
+        .then(setServerStatus)
+        .catch(() => {});
     }
+
+    const pingInterval = setInterval(() => {
+      if (inTauri) {
+        pingServer(instance.serverAddress)
+          .then(setServerStatus)
+          .catch(() => {});
+      }
+    }, 30000);
+
     const unlisteners: (() => void)[] = [];
     onSyncProgress((p) => {
       if (p.instanceId === instance.id) setProgress(p);
@@ -59,10 +94,20 @@ export default function Home({ session, onSession }: Props) {
       if (st === "running") {
         setGameRunning(true);
         setLaunching(false);
+        setCrashReport(null);
+        setCrashSent(false);
       } else if (st.startsWith("stopped")) {
         setGameRunning(false);
         setLaunching(false);
         setLaunchStatus(null);
+        const code = Number(st.split(":")[1] ?? "0");
+        if (code !== 0) {
+          getLatestCrashReport(instance.id)
+            .then((rep) => {
+              if (rep) setCrashReport(rep);
+            })
+            .catch(() => {});
+        }
       }
     }).then((u) => unlisteners.push(u));
     onGameLog((entry) => {
@@ -70,9 +115,10 @@ export default function Home({ session, onSession }: Props) {
     }).then((u) => unlisteners.push(u));
 
     return () => {
+      clearInterval(pingInterval);
       unlisteners.forEach((u) => u());
     };
-  }, [instance.id, instance.manifestUrl]);
+  }, [instance.id, instance.manifestUrl, instance.serverAddress]);
 
   async function handleSync() {
     setSyncing(true);
@@ -90,10 +136,10 @@ export default function Home({ session, onSession }: Props) {
   async function handlePlay() {
     if (!session || session.offline || !session.access_token) return;
     setSyncError(null);
+    setCrashReport(null);
     setLaunching(true);
     setLogs([]);
     try {
-      // Automatically sync modpack if not yet synced or out of date
       if (!isUpToDate) {
         setLaunchStatus("Syncing modpack files before launch...");
         const next = await syncInstance(instance.id, instance.manifestUrl);
@@ -110,6 +156,30 @@ export default function Home({ session, onSession }: Props) {
       setSyncError(String(e));
       setLaunching(false);
       setLaunchStatus(null);
+    }
+  }
+
+  async function handleSendCrashWebhook() {
+    if (!crashReport) return;
+    setSendingCrash(true);
+    try {
+      const s = await getSettings();
+      if (!s.crashWebhookUrl) {
+        setSyncError("Configure a Discord Crash Webhook URL in Settings first, or click Copy Crash Report.");
+        return;
+      }
+      await submitCrashWebhook({
+        webhookUrl: s.crashWebhookUrl,
+        playerName: session?.profile.name ?? "Unknown",
+        instanceId: instance.id,
+        summary: crashReport.summary,
+        logSnippet: crashReport.content,
+      });
+      setCrashSent(true);
+    } catch (e) {
+      setSyncError(String(e));
+    } finally {
+      setSendingCrash(false);
     }
   }
 
@@ -137,10 +207,32 @@ export default function Home({ session, onSession }: Props) {
         <div className="absolute -right-24 -top-24 h-72 w-72 rounded-full bg-pb-cyan/10 blur-3xl" />
         <div className="absolute -bottom-24 -left-16 h-64 w-64 rounded-full bg-pb-purple/10 blur-3xl" />
         <div className="relative">
+          {/* Status Pills */}
           <div className="flex flex-wrap items-center gap-2">
-            <div className="inline-flex items-center gap-2 rounded-full bg-pb-mint/15 px-3 py-1 text-xs font-bold text-pb-mint">
-              <span className="h-2 w-2 rounded-full bg-pb-mint" /> {instance.serverAddress}
+            <div
+              className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-bold ${
+                serverStatus?.online
+                  ? "bg-pb-mint/15 text-pb-mint"
+                  : "bg-white/10 text-pb-muted"
+              }`}
+            >
+              <span
+                className={`h-2 w-2 rounded-full ${
+                  serverStatus?.online ? "bg-pb-mint animate-pulse" : "bg-pb-muted"
+                }`}
+              />
+              {instance.serverAddress}
+              {serverStatus?.online && serverStatus.latencyMs !== null && (
+                <span className="text-[11px] opacity-80">({serverStatus.latencyMs} ms)</span>
+              )}
             </div>
+
+            {serverStatus?.online && (
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-pb-cyan/15 px-3 py-1 text-xs font-bold text-pb-cyan">
+                <Users size={12} /> {serverStatus.onlinePlayers} / {serverStatus.maxPlayers} Online
+              </span>
+            )}
+
             {latestVersion && (
               <span className="rounded-full bg-white/5 px-3 py-1 text-xs font-semibold text-pb-muted">
                 Modpack v{latestVersion} ({manifest?.mods.length ?? 0} client mods)
@@ -151,6 +243,7 @@ export default function Home({ session, onSession }: Props) {
           <h1 className="mt-3 text-3xl font-extrabold">{instance.name}</h1>
           <p className="mt-1 text-sm text-pb-muted">
             Minecraft {instance.minecraftVersion} - {instance.loader}
+            {serverStatus?.motd ? ` • ${serverStatus.motd}` : ""}
           </p>
 
           <div className="mt-8 flex flex-wrap items-center gap-3">
@@ -239,6 +332,37 @@ export default function Home({ session, onSession }: Props) {
           </p>
         </div>
       </section>
+
+      {/* Crash Report Diagnostics Modal / Banner */}
+      {crashReport && (
+        <section className="mt-6 rounded-2xl border border-red-500/40 bg-red-500/10 p-5">
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <AlertTriangle size={22} className="shrink-0 text-red-400" />
+              <div>
+                <h2 className="text-sm font-bold text-white">Minecraft Crashed — {crashReport.filename}</h2>
+                <p className="mt-0.5 text-xs text-red-200">{crashReport.summary}</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => navigator.clipboard.writeText(crashReport.content)}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-white/10 px-3 py-1.5 text-xs font-semibold text-white hover:bg-white/20"
+              >
+                <Copy size={13} /> Copy Crash Report
+              </button>
+              <button
+                onClick={handleSendCrashWebhook}
+                disabled={sendingCrash || crashSent}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-pb-cyan px-3 py-1.5 text-xs font-bold text-[#031617] hover:brightness-110 disabled:opacity-50"
+              >
+                <Send size={13} />{" "}
+                {crashSent ? "Sent to Support" : sendingCrash ? "Sending..." : "Send to PETABLOCKS Support"}
+              </button>
+            </div>
+          </div>
+        </section>
+      )}
 
       {showLogs && logs.length > 0 && (
         <section className="mt-6 rounded-2xl border border-white/10 bg-pb-card p-4">

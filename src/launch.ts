@@ -8,6 +8,7 @@ export interface LauncherSettings {
   extraJvmArgs: string;
   closeOnLaunch: boolean;
   directConnect: boolean;
+  crashWebhookUrl?: string | null;
 }
 
 export interface JavaStatus {
@@ -37,6 +38,7 @@ const DEFAULT_SETTINGS: LauncherSettings = {
     "-XX:+UseG1GC -XX:+ParallelRefProcEnabled -XX:MaxGCPauseMillis=200 -XX:+UnlockExperimentalVMOptions -XX:+DisableExplicitGC",
   closeOnLaunch: false,
   directConnect: true,
+  crashWebhookUrl: null,
 };
 
 export const getSettings = (): Promise<LauncherSettings> =>
