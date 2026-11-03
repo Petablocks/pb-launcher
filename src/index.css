@@ -1,0 +1,50 @@
+@import url("https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap");
+@import "tailwindcss";
+
+/* PETABLOCKS brand tokens (source: petablocks-brand/tokens/theme.css, tokens.css) */
+:root {
+  --pb-cyan: #0FCDF8;
+  --pb-mint: #8BFAA3;
+  --pb-purple: #A824FF;
+  --pb-magenta: #E040FB;
+  --pb-deep-purple: #36005D;
+  --pb-bg: #0B0F19;
+  --pb-card: #111827;
+  --pb-elevated: #1F2937;
+  --pb-line: rgba(255, 255, 255, 0.08);
+  --pb-fg: #F9FAFB;
+  --pb-muted: #9CA3AF;
+  --pb-gradient: linear-gradient(135deg, #0FCDF8 0%, #8BFAA3 100%);
+  --pb-gradient-tagline: linear-gradient(135deg, #E040FB 0%, #A824FF 100%);
+  color-scheme: dark;
+}
+
+@theme {
+  --color-pb-cyan: #0FCDF8;
+  --color-pb-mint: #8BFAA3;
+  --color-pb-purple: #A824FF;
+  --color-pb-magenta: #E040FB;
+  --color-pb-bg: #0B0F19;
+  --color-pb-card: #111827;
+  --color-pb-elevated: #1F2937;
+  --color-pb-muted: #9CA3AF;
+  --font-sans: "Plus Jakarta Sans", "Inter", system-ui, -apple-system, sans-serif;
+}
+
+html, body, #root { height: 100%; margin: 0; }
+body {
+  background: var(--pb-bg);
+  color: var(--pb-fg);
+  font-family: var(--font-sans);
+  overflow: hidden;
+  user-select: none;
+}
+::-webkit-scrollbar { width: 8px; }
+::-webkit-scrollbar-thumb { background: var(--pb-elevated); border-radius: 4px; }
+
+.pb-text-gradient {
+  background: var(--pb-gradient);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.pb-glow { box-shadow: 0 0 24px rgba(15, 205, 248, 0.35); }
