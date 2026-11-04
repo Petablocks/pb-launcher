@@ -132,6 +132,32 @@ async fn crash_submit_webhook(
 }
 
 #[tauri::command]
+async fn feedback_submit(
+    webhook_url: String,
+    category: String,
+    title: String,
+    description: String,
+    player_name: String,
+    contact: String,
+    launcher_version: String,
+    include_diagnostics: bool,
+    instance_id: String,
+) -> Result<(), String> {
+    community::submit_beta_feedback(
+        &webhook_url,
+        &category,
+        &title,
+        &description,
+        &player_name,
+        &contact,
+        &launcher_version,
+        include_diagnostics,
+        &instance_id,
+    )
+    .await
+}
+
+#[tauri::command]
 async fn updater_check(current_version: String) -> Result<LauncherUpdateInfo, String> {
     updater::check_for_update(&current_version).await
 }
@@ -168,6 +194,7 @@ pub fn run() {
             screenshots_dir,
             crash_latest,
             crash_submit_webhook,
+            feedback_submit,
             updater_check,
             updater_install
         ])

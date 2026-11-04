@@ -129,8 +129,9 @@ pub async fn install_update(app: AppHandle, download_url: String, version: Strin
 
     let _ = app.emit("updater-status", "Launching installer & restarting...");
 
-    // Launch NSIS installer (/P = passive progress bar, then relaunch)
+    // Launch Tauri NSIS installer in passive + auto-relaunch mode (/P /R) so there are zero wizard steps
     Command::new(&installer_path)
+        .args(["/P", "/R"])
         .spawn()
         .map_err(|e| format!("Failed to start installer: {e}"))?;
 

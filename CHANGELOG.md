@@ -3,6 +3,17 @@
 All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.0] - 2026-11-04
+### Added
+- **Beta Feedback & Bug Reporting System (`src/pages/Feedback.tsx`, `src-tauri/src/community.rs`, `src/App.tsx`, `src/components/TitleBar.tsx`)**:
+  - Added a dedicated **Beta Feedback** sidebar tab (`BETA` badge) and `BETA` pill in the custom window titlebar ready for select Beta testers once Mojang approves the Azure AppID.
+  - Supports 4 report categories (**Bug Report**, **Crash / Freeze**, **Feature Idea**, **Beta Impression**) with automatic system & launcher diagnostics attachment (RAM allocation, Java 21 runtime detection, synced modpack version, disabled mods count, OS architecture, and launcher version).
+  - Delivers structured embeds directly to the PETABLOCKS engineering Discord channel out-of-the-box (no manual webhook configuration required by players), alongside a secondary **Open GitHub Issue** shortcut.
+
+### Changed
+- **Zero-Wizard Passive Auto-Updater (`src-tauri/src/updater.rs`)**:
+  - Passed `/P /R` flags to the Tauri NSIS installer when updating (`Command::new(&installer_path).args(["/P", "/R"])`), running updates in passive progress-bar-only mode (skipping all Next/Install wizard prompts) and automatically relaunching the launcher once finished.
+
 ## [1.4.0] - 2026-11-03
 ### Added
 - **Official `Minecraft Ten` Display Font (`public/assets/fonts/minecraft-ten.ttf`, `src/index.css`)**:

@@ -24,6 +24,12 @@ export default function TitleBar() {
         >
           LAUNCHER
         </span>
+        <span
+          data-tauri-drag-region
+          className="rounded-md border border-pb-purple/40 bg-pb-purple/15 px-1.5 py-0.5 text-[10px] font-extrabold tracking-widest text-pb-purple"
+        >
+          BETA
+        </span>
       </div>
       <div className="flex h-full">
         <button

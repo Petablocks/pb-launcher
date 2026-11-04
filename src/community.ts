@@ -54,6 +54,18 @@ export const submitCrashWebhook = (args: {
   logSnippet: string;
 }): Promise<void> => invoke<void>("crash_submit_webhook", args);
 
+export const submitBetaFeedback = (args: {
+  webhookUrl: string;
+  category: string;
+  title: string;
+  description: string;
+  playerName: string;
+  contact: string;
+  launcherVersion: string;
+  includeDiagnostics: boolean;
+  instanceId: string;
+}): Promise<void> => invoke<void>("feedback_submit", args);
+
 export interface LauncherUpdateInfo {
   currentVersion: string;
   latestVersion: string;

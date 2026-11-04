@@ -1,11 +1,11 @@
 # PETABLOCKS Launcher
 
-**Version**: `v1.4.0` - Official Minecraft launcher for the [PETABLOCKS](https://petablocks.com) network.
+**Version**: `v1.5.0` - Official Minecraft launcher for the [PETABLOCKS](https://petablocks.com) network.
 
 Built with Tauri v2 (Rust) + React 19 + TypeScript + Tailwind CSS v4, using the official `petablocks-brand` design tokens.
 
 ## Status
-All 5 phases (scaffold, branded shell, Microsoft sign-in, GitHub Releases manifest sync engine, Adoptium Java 21 auto-installer, NeoForge 21.1.259 launch engine, native TCP Server List Ping, Discord Rich Presence, Screenshots gallery, News feed, and Crash Report diagnostics) are complete.
+All 5 phases (scaffold, branded shell, Microsoft sign-in, GitHub Releases manifest sync engine, Adoptium Java 21 auto-installer, NeoForge 21.1.259 launch engine, native TCP Server List Ping, Discord Rich Presence, Screenshots gallery, News feed, Crash Report diagnostics, passive `/P /R` one-click auto-updater, and in-app Beta Feedback & Bug Reporting) are complete.
 
 ## Season 2 instance
 | Property | Value |
