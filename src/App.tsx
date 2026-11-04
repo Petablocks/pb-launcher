@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import {
   Gamepad2,
   Boxes,
+  Sparkles,
   Image,
   Settings as SettingsIcon,
   Newspaper,
@@ -9,23 +10,28 @@ import {
   DownloadCloud,
   RefreshCw,
   Loader2,
+  ExternalLink,
 } from "lucide-react";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import TitleBar from "./components/TitleBar";
 import Home from "./pages/Home";
 import Mods from "./pages/Mods";
+import Packs from "./pages/Packs";
 import Screenshots from "./pages/Screenshots";
 import News from "./pages/News";
 import Feedback from "./pages/Feedback";
 import Settings from "./pages/Settings";
-import { Session } from "./auth";
+import { Session, inTauri } from "./auth";
 import { LauncherUpdateInfo, checkLauncherUpdate, installLauncherUpdate } from "./community";
+import { BuyMeACoffeeLogo } from "./components/BrandIcons";
 import { APP_VERSION } from "./version";
 
-type Tab = "play" | "mods" | "screenshots" | "news" | "feedback" | "settings";
+type Tab = "play" | "mods" | "packs" | "screenshots" | "news" | "feedback" | "settings";
 
 const NAV: { id: Tab; label: string; icon: typeof Gamepad2; badge?: string }[] = [
   { id: "play", label: "Play", icon: Gamepad2 },
   { id: "mods", label: "Mods", icon: Boxes },
+  { id: "packs", label: "Shaders & Packs", icon: Sparkles },
   { id: "screenshots", label: "Screenshots", icon: Image },
   { id: "news", label: "News", icon: Newspaper },
   { id: "feedback", label: "Beta Feedback", icon: Bug, badge: "BETA" },
@@ -123,6 +129,28 @@ export default function App() {
               );
             })}
           </div>
+          {/* Optional Community Support (Buy Me a Coffee) */}
+          <div className="mb-3 rounded-xl border border-[#FFDD00]/20 bg-[#FFDD00]/5 p-2.5">
+            <div className="mb-1.5 flex items-center justify-between px-0.5 text-[10px] font-bold text-pb-muted">
+              <span>Optional Hosting Support</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                const url = "https://buymeacoffee.com/petabyteofficial";
+                if (inTauri) openUrl(url).catch(() => {});
+                else window.open(url, "_blank");
+              }}
+              className="flex w-full cursor-pointer items-center justify-between rounded-lg bg-[#FFDD00] px-2.5 py-1.5 text-xs font-extrabold text-black transition hover:bg-[#ffe338]"
+            >
+              <span className="flex items-center gap-2">
+                <BuyMeACoffeeLogo size={14} />
+                Buy Me a Coffee
+              </span>
+              <ExternalLink size={12} />
+            </button>
+          </div>
+
           <div className="flex items-center justify-between px-3 pb-1 text-xs text-pb-muted">
             <span>Launcher v{APP_VERSION}</span>
             <button
@@ -140,6 +168,8 @@ export default function App() {
             <Home session={session} onSession={setSession} />
           ) : tab === "mods" ? (
             <Mods />
+          ) : tab === "packs" ? (
+            <Packs />
           ) : tab === "screenshots" ? (
             <Screenshots />
           ) : tab === "news" ? (

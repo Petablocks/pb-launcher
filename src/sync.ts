@@ -28,6 +28,18 @@ export interface LauncherManifest {
 export interface InstanceState {
   installedVersion: string | null;
   disabledMods: string[];
+  totalPlaytimeSeconds?: number;
+  sessionsPlayed?: number;
+  lastPlayedEpoch?: number | null;
+}
+
+export interface PackEntry {
+  filename: string;
+  cleanName: string;
+  size: number;
+  enabled: boolean;
+  active: boolean;
+  kind: "shader" | "resourcepack";
 }
 
 export interface SyncProgress {
@@ -64,6 +76,26 @@ export const listCustomMods = (instanceId: string) =>
 
 export const getCustomModsDir = (instanceId: string) =>
   invoke<string>("sync_custom_mods_dir", { instanceId });
+
+export const listPacks = (instanceId: string): Promise<PackEntry[]> =>
+  inTauri ? invoke<PackEntry[]>("packs_list", { instanceId }) : Promise.resolve([]);
+
+export const setPackEnabled = (
+  instanceId: string,
+  kind: "shader" | "resourcepack",
+  filename: string,
+  enabled: boolean
+): Promise<PackEntry[]> =>
+  invoke<PackEntry[]>("packs_set_enabled", { instanceId, kind, filename, enabled });
+
+export const setActiveShader = (
+  instanceId: string,
+  shaderFilename: string | null
+): Promise<PackEntry[]> =>
+  invoke<PackEntry[]>("packs_set_active_shader", { instanceId, shaderFilename });
+
+export const openPacksDir = (instanceId: string, kind: "shader" | "resourcepack"): Promise<string> =>
+  invoke<string>("packs_open_dir", { instanceId, kind });
 
 export const onSyncProgress = (cb: (p: SyncProgress) => void): Promise<UnlistenFn> =>
   inTauri ? listen<SyncProgress>("sync-progress", (e) => cb(e.payload)) : Promise.resolve(() => {});

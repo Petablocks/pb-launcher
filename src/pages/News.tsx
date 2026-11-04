@@ -1,6 +1,6 @@
-import { ExternalLink, Globe, Map, Sparkles } from "lucide-react";
+import { ExternalLink, Globe, Heart, Map, Sparkles } from "lucide-react";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { GitHubLogo } from "../components/BrandIcons";
+import { BuyMeACoffeeLogo, GitHubLogo } from "../components/BrandIcons";
 
 const UPDATES = [
   {
@@ -47,7 +47,7 @@ export default function News() {
           <button
             key={url}
             onClick={() => openUrl(url).catch(() => {})}
-            className="flex items-center justify-between rounded-xl border border-white/10 bg-pb-card p-4 text-left transition hover:border-pb-cyan/50"
+            className="flex cursor-pointer items-center justify-between rounded-xl border border-white/10 bg-pb-card p-4 text-left transition hover:border-pb-cyan/50"
           >
             <div className="flex items-center gap-3">
               <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-pb-cyan/15 text-pb-cyan">
@@ -59,6 +59,32 @@ export default function News() {
           </button>
         ))}
       </div>
+
+      {/* Optional Community Hosting Support Banner (matching petablocks-website About page) */}
+      <section className="rounded-2xl border border-[#FFDD00]/30 bg-[#FFDD00]/5 p-5">
+        <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
+          <div className="flex items-start gap-3.5">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[#FFDD00]/40 bg-[#FFDD00]/20 text-[#FFDD00]">
+              <Heart size={19} />
+            </div>
+            <div>
+              <h2 className="text-sm font-bold text-white">Fuel Our Community & Hosting (Optional)</h2>
+              <p className="mt-0.5 text-xs leading-relaxed text-pb-muted">
+                PETABLOCKS is 100% free to play. Optional donations via Buy Me a Coffee go directly toward our dedicated MDRCloud server hosting and bandwidth costs.
+              </p>
+            </div>
+          </div>
+
+          <button
+            onClick={() => openUrl("https://buymeacoffee.com/petabyteofficial").catch(() => {})}
+            className="inline-flex shrink-0 cursor-pointer items-center gap-2 rounded-xl bg-[#FFDD00] px-4 py-2.5 text-xs font-extrabold uppercase tracking-wider text-black shadow-lg transition hover:bg-[#ffe338]"
+          >
+            <BuyMeACoffeeLogo size={15} />
+            <span>Buy Us a Coffee</span>
+            <ExternalLink size={13} />
+          </button>
+        </div>
+      </section>
 
       {/* Changelog feed */}
       <div className="space-y-4">

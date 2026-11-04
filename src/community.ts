@@ -89,3 +89,6 @@ export const checkLauncherUpdate = (currentVersion: string): Promise<LauncherUpd
 
 export const installLauncherUpdate = (downloadUrl: string, version: string): Promise<void> =>
   invoke<void>("updater_install", { downloadUrl, version });
+
+export const finishSplash = (): Promise<void> =>
+  inTauri ? invoke<void>("splash_complete") : Promise.resolve();
