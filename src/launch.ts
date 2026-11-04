@@ -36,7 +36,7 @@ const DEFAULT_SETTINGS: LauncherSettings = {
   customJavaPath: null,
   extraJvmArgs:
     "-XX:+UseG1GC -XX:+ParallelRefProcEnabled -XX:MaxGCPauseMillis=200 -XX:+UnlockExperimentalVMOptions -XX:+DisableExplicitGC",
-  closeOnLaunch: false,
+  closeOnLaunch: true,
   directConnect: true,
   crashWebhookUrl: null,
 };

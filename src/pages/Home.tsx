@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import {
   AlertTriangle,
   CheckCircle2,
+  Clock,
   Copy,
   DownloadCloud,
   Loader2,
@@ -100,6 +101,7 @@ export default function Home({ session, onSession }: Props) {
         setGameRunning(false);
         setLaunching(false);
         setLaunchStatus(null);
+        getSyncState(instance.id).then(setSyncState).catch(() => {});
         const code = Number(st.split(":")[1] ?? "0");
         if (code !== 0) {
           getLatestCrashReport(instance.id)
@@ -232,6 +234,14 @@ export default function Home({ session, onSession }: Props) {
             {latestVersion && (
               <span className="rounded-full bg-white/5 px-3 py-1 text-xs font-semibold text-pb-muted">
                 Modpack v{latestVersion} ({manifest?.mods.length ?? 0} client mods)
+              </span>
+            )}
+
+            {(syncState.totalPlaytimeSeconds ?? 0) >= 60 && (
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-pb-purple/15 px-3 py-1 text-xs font-bold text-pb-purple">
+                <Clock size={12} />{" "}
+                {Math.floor((syncState.totalPlaytimeSeconds ?? 0) / 3600)}h{" "}
+                {Math.floor(((syncState.totalPlaytimeSeconds ?? 0) % 3600) / 60)}m played
               </span>
             )}
           </div>
@@ -378,7 +388,12 @@ export default function Home({ session, onSession }: Props) {
         </section>
       )}
 
-      <AccountCard session={session} onSession={onSession} />
+      <AccountCard
+        session={session}
+        onSession={onSession}
+        totalPlaytimeSeconds={syncState.totalPlaytimeSeconds ?? 0}
+        sessionsPlayed={syncState.sessionsPlayed ?? 0}
+      />
     </div>
   );
 }

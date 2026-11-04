@@ -13,8 +13,8 @@ use java::JavaStatus;
 use launch::LaunchRequest;
 use ping::ServerStatus;
 use settings::LauncherSettings;
-use sync::{CustomModFile, InstanceState, LauncherManifest};
-use tauri::AppHandle;
+use sync::{CustomModFile, InstanceState, LauncherManifest, PackEntry};
+use tauri::{AppHandle, Manager};
 use updater::LauncherUpdateInfo;
 
 #[tauri::command]
@@ -65,6 +65,35 @@ fn sync_list_custom_mods(instance_id: String) -> Result<Vec<CustomModFile>, Stri
 #[tauri::command]
 fn sync_custom_mods_dir(instance_id: String) -> Result<String, String> {
     sync::open_custom_mods_dir(&instance_id)
+}
+
+#[tauri::command]
+fn packs_list(instance_id: String) -> Result<Vec<PackEntry>, String> {
+    sync::list_packs(&instance_id)
+}
+
+#[tauri::command]
+fn packs_set_enabled(
+    instance_id: String,
+    kind: String,
+    filename: String,
+    enabled: bool,
+) -> Result<Vec<PackEntry>, String> {
+    sync::set_pack_enabled(&instance_id, &kind, &filename, enabled)
+}
+
+#[tauri::command]
+fn packs_set_active_shader(
+    instance_id: String,
+    shader_filename: Option<String>,
+) -> Result<Vec<PackEntry>, String> {
+    sync::set_active_shader(&instance_id, shader_filename.as_deref())?;
+    sync::list_packs(&instance_id)
+}
+
+#[tauri::command]
+fn packs_open_dir(instance_id: String, kind: String) -> Result<String, String> {
+    sync::open_packs_dir(&instance_id, &kind)
 }
 
 #[tauri::command]
@@ -167,6 +196,18 @@ async fn updater_install(app: AppHandle, download_url: String, version: String) 
     updater::install_update(app, download_url, version).await
 }
 
+#[tauri::command]
+fn splash_complete(app: AppHandle) -> Result<(), String> {
+    if let Some(main_win) = app.get_webview_window("main") {
+        let _ = main_win.show();
+        let _ = main_win.set_focus();
+    }
+    if let Some(splash_win) = app.get_webview_window("splash") {
+        let _ = splash_win.close();
+    }
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     community::update_discord_rpc("In PETABLOCKS Launcher", "Ready to Play");
@@ -183,6 +224,10 @@ pub fn run() {
             sync_instance,
             sync_list_custom_mods,
             sync_custom_mods_dir,
+            packs_list,
+            packs_set_enabled,
+            packs_set_active_shader,
+            packs_open_dir,
             settings_get,
             settings_save,
             java_detect,
@@ -196,7 +241,8 @@ pub fn run() {
             crash_submit_webhook,
             feedback_submit,
             updater_check,
-            updater_install
+            updater_install,
+            splash_complete
         ])
         .run(tauri::generate_context!())
         .expect("error while running PETABLOCKS Launcher");

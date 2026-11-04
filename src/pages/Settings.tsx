@@ -239,8 +239,8 @@ export default function Settings() {
         </div>
       </section>
 
-      {/* Server Connection Options */}
-      <section className="rounded-2xl border border-white/10 bg-pb-card p-6">
+      {/* Server Connection & Window Behavior Options */}
+      <section className="rounded-2xl border border-white/10 bg-pb-card p-6 space-y-5">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-pb-mint/15 text-pb-mint">
@@ -263,6 +263,33 @@ export default function Settings() {
             <span
               className={`inline-block h-4 w-4 transform rounded-full bg-[#031617] transition ${
                 settings.directConnect ? "translate-x-6" : "translate-x-1 bg-white"
+              }`}
+            />
+          </button>
+        </div>
+
+        <div className="flex items-center justify-between border-t border-white/10 pt-5">
+          <div className="flex items-center gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-pb-purple/15 text-pb-purple">
+              <Cpu size={18} />
+            </div>
+            <div>
+              <div className="text-sm font-bold">Hide Launcher While Playing Minecraft</div>
+              <div className="text-xs text-pb-muted">
+                Automatically hides the launcher window once Minecraft starts and restores it when you quit the game.
+              </div>
+            </div>
+          </div>
+
+          <button
+            onClick={() => setSettings({ ...settings, closeOnLaunch: !settings.closeOnLaunch })}
+            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full transition ${
+              settings.closeOnLaunch ? "bg-pb-cyan" : "bg-white/15"
+            }`}
+          >
+            <span
+              className={`inline-block h-4 w-4 transform rounded-full bg-[#031617] transition ${
+                settings.closeOnLaunch ? "translate-x-6" : "translate-x-1 bg-white"
               }`}
             />
           </button>

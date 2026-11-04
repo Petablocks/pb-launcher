@@ -42,9 +42,12 @@
   --font-minecraft: "Minecraft Ten", monospace;
 }
 
-html, body, #root { height: 100%; margin: 0; }
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  background: transparent;
+}
 body {
-  background: var(--pb-bg);
   color: var(--pb-fg);
   font-family: var(--font-sans);
   overflow: hidden;

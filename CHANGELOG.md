@@ -3,6 +3,21 @@
 All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.0] - 2026-11-04
+### Added
+- **Frameless Transparent Startup Splash Screen (`src/components/SplashScreen.tsx`, `src-tauri/tauri.conf.json`, `src-tauri/src/lib.rs`)**:
+  - Dedicated transparent, always-on-top `splash` window featuring the floating PETABLOCKS stacked emblem, glowing ambient backdrop, and real-time boot progress bar.
+  - Automatically checks for and installs launcher updates during the splash sequence before revealing the main window, restores the Microsoft session, and pre-verifies the Season 2 manifest, Java 21 runtime, and server status.
+- **Shaders & Resource Packs Manager (`src/pages/Packs.tsx`, `src-tauri/src/sync.rs`)**:
+  - New **Shaders & Packs** sidebar tab to inspect and toggle `.zip` shaderpacks (`shaderpacks/`) and resource packs (`resourcepacks/`).
+  - One-click **Activate Shader** integration that directly reads and writes `shaderPack=` and `enableShaders=` in `config/iris.properties` (allowing players to switch between Complementary Reimagined, Complementary Unbound, or Shaders Off before launching).
+- **Full-Body 3D Skin Preview & Session Playtime Tracking (`src/components/AccountCard.tsx`, `src/pages/Home.tsx`, `src-tauri/src/launch.rs`)**:
+  - Displays the signed-in player's full-body Minecraft skin render alongside cumulative playtime (`Xh Ym played`) and session count.
+- **Hide Launcher While Playing & Auto-Restore (`src-tauri/src/launch.rs`, `src/pages/Settings.tsx`)**:
+  - Automatically hides the launcher window when Minecraft spawns and restores/focuses it when the game exits (configurable in Settings, enabled by default).
+- **Optional Hosting Support Link (`src/App.tsx`, `src/pages/News.tsx`, `src/components/BrandIcons.tsx`)**:
+  - Added the official **Buy Me a Coffee** vector logo from [TheSVG.org](https://thesvg.org) (`https://buymeacoffee.com/petabyteofficial`) in the sidebar and News page for optional community hosting support.
+
 ## [1.5.0] - 2026-11-04
 ### Added
 - **Beta Feedback & Bug Reporting System (`src/pages/Feedback.tsx`, `src-tauri/src/community.rs`, `src/App.tsx`, `src/components/TitleBar.tsx`)**:

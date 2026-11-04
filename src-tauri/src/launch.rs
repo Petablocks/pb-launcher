@@ -8,8 +8,8 @@ use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::sync::Arc;
-use std::time::Duration;
-use tauri::{AppHandle, Emitter};
+use std::time::{Duration, Instant};
+use tauri::{AppHandle, Emitter, Manager};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command as TokioCommand;
 use tokio::sync::Semaphore;
@@ -503,6 +503,12 @@ pub async fn launch_game(app: AppHandle, req: LaunchRequest) -> Result<(), Strin
         .spawn()
         .map_err(|e| format!("Failed to spawn Minecraft process: {e}"))?;
 
+    if settings.close_on_launch {
+        if let Some(main_win) = app.get_webview_window("main") {
+            let _ = main_win.hide();
+        }
+    }
+
     if let Some(stdout) = child.stdout.take() {
         let app_clone = app.clone();
         tokio::spawn(async move {
@@ -524,9 +530,18 @@ pub async fn launch_game(app: AppHandle, req: LaunchRequest) -> Result<(), Strin
     }
 
     let app_wait = app.clone();
+    let inst_id = req.instance_id.clone();
+    let started_at = Instant::now();
     tokio::spawn(async move {
         let code = child.wait().await.ok().and_then(|s| s.code()).unwrap_or(-1);
+        let elapsed = started_at.elapsed().as_secs();
+        crate::sync::record_session_playtime(&inst_id, elapsed);
         crate::community::update_discord_rpc("In PETABLOCKS Launcher", "Ready to Play");
+        if let Some(main_win) = app_wait.get_webview_window("main") {
+            let _ = main_win.show();
+            let _ = main_win.unminimize();
+            let _ = main_win.set_focus();
+        }
         let _ = app_wait.emit("game-state", format!("stopped:{code}"));
     });
 
