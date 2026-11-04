@@ -8,7 +8,7 @@ mod sync;
 mod updater;
 
 use auth::{DeviceCodeInfo, Session};
-use community::{CrashReportInfo, ScreenshotItem};
+use community::{CrashReportInfo, DiscordLinkStatus, LauncherLinkCodeResponse, ScreenshotItem};
 use java::JavaStatus;
 use launch::LaunchRequest;
 use ping::ServerStatus;
@@ -208,6 +208,19 @@ fn splash_complete(app: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+#[tauri::command]
+async fn discord_check_link(uuid: String) -> Result<DiscordLinkStatus, String> {
+    community::check_discord_link(&uuid).await
+}
+
+#[tauri::command]
+async fn discord_request_link_code(
+    uuid: String,
+    username: String,
+) -> Result<LauncherLinkCodeResponse, String> {
+    community::request_discord_link_code(&uuid, &username).await
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     community::update_discord_rpc("In PETABLOCKS Launcher", "Ready to Play");
@@ -242,7 +255,9 @@ pub fn run() {
             feedback_submit,
             updater_check,
             updater_install,
-            splash_complete
+            splash_complete,
+            discord_check_link,
+            discord_request_link_code
         ])
         .run(tauri::generate_context!())
         .expect("error while running PETABLOCKS Launcher");

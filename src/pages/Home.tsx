@@ -33,6 +33,7 @@ import {
 } from "../launch";
 import {
   CrashReportInfo,
+  DiscordLinkStatus,
   ServerStatus,
   getLatestCrashReport,
   pingServer,
@@ -63,6 +64,7 @@ export default function Home({ session, onSession }: Props) {
   const [showLogs, setShowLogs] = useState(false);
 
   const [serverStatus, setServerStatus] = useState<ServerStatus | null>(null);
+  const [discordStatus, setDiscordStatus] = useState<DiscordLinkStatus | null>(null);
   const [crashReport, setCrashReport] = useState<CrashReportInfo | null>(null);
   const [sendingCrash, setSendingCrash] = useState(false);
   const [crashSent, setCrashSent] = useState(false);
@@ -186,6 +188,7 @@ export default function Home({ session, onSession }: Props) {
     Boolean(syncState.installedVersion) &&
     (!latestVersion || syncState.installedVersion === latestVersion);
   const verifiedOnlineSession = Boolean(session && !session.offline && session.access_token);
+  const betaDiscordReady = Boolean(discordStatus?.linked && discordStatus?.inGuild);
 
   const percent =
     progress && progress.total > 0
@@ -255,7 +258,7 @@ export default function Home({ session, onSession }: Props) {
           <div className="mt-8 flex flex-wrap items-center gap-3">
             <button
               onClick={handlePlay}
-              disabled={!verifiedOnlineSession || syncing || launching || gameRunning}
+              disabled={!verifiedOnlineSession || !betaDiscordReady || syncing || launching || gameRunning}
               className="pb-glow font-minecraft inline-flex cursor-pointer items-center gap-2.5 rounded-xl bg-pb-cyan px-8 py-3 text-xl tracking-wider text-[#031617] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {launching ? (
@@ -332,6 +335,10 @@ export default function Home({ session, onSession }: Props) {
           <p className="mt-3 text-xs text-pb-muted">
             {!verifiedOnlineSession
               ? "Sign in with a verified Microsoft account owning Minecraft: Java Edition to enable Play."
+              : !discordStatus?.linked
+              ? "Link your Discord account below to verify Closed Beta access and unlock Play."
+              : !discordStatus?.inGuild
+              ? "Join the official PETABLOCKS Discord server below to unlock Closed Beta access."
               : gameRunning
               ? `Connected to ${instance.name}. Have fun!`
               : "Ready to launch Minecraft 1.21.1 (NeoForge) and connect to s2.petablocks.com."}
@@ -393,6 +400,8 @@ export default function Home({ session, onSession }: Props) {
         onSession={onSession}
         totalPlaytimeSeconds={syncState.totalPlaytimeSeconds ?? 0}
         sessionsPlayed={syncState.sessionsPlayed ?? 0}
+        discordStatus={discordStatus}
+        onDiscordStatus={setDiscordStatus}
       />
     </div>
   );

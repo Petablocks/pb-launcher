@@ -92,3 +92,39 @@ export const installLauncherUpdate = (downloadUrl: string, version: string): Pro
 
 export const finishSplash = (): Promise<void> =>
   inTauri ? invoke<void>("splash_complete") : Promise.resolve();
+
+export interface DiscordLinkStatus {
+  linked: boolean;
+  discordId: string | null;
+  discordUsername: string | null;
+  rank: string;
+  inGuild: boolean;
+  betaEligible: boolean;
+  pendingCode: string | null;
+}
+
+export interface LauncherLinkCodeResponse {
+  ok: boolean;
+  code: string;
+  oauthUrl: string;
+  expiresInMinutes: number;
+}
+
+export const checkDiscordLink = (uuid: string): Promise<DiscordLinkStatus> =>
+  inTauri
+    ? invoke<DiscordLinkStatus>("discord_check_link", { uuid })
+    : Promise.resolve({
+        linked: false,
+        discordId: null,
+        discordUsername: null,
+        rank: "Player",
+        inGuild: false,
+        betaEligible: false,
+        pendingCode: null,
+      });
+
+export const requestDiscordLinkCode = (
+  uuid: string,
+  username: string
+): Promise<LauncherLinkCodeResponse> =>
+  invoke<LauncherLinkCodeResponse>("discord_request_link_code", { uuid, username });
