@@ -9,6 +9,8 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use crate::sync::instance_dir;
 
 const DISCORD_APP_ID: &str = "1302689041827651624";
+const DEFAULT_BETA_WEBHOOK: &str =
+    "https://discord.com/api/webhooks/1549560198153109604/REDACTED";
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -122,9 +124,11 @@ pub async fn submit_crash_webhook(
     summary: &str,
     log_snippet: &str,
 ) -> Result<(), String> {
-    if webhook_url.trim().is_empty() {
-        return Err("No Discord Webhook URL provided.".into());
-    }
+    let target_url = if webhook_url.trim().is_empty() {
+        DEFAULT_BETA_WEBHOOK
+    } else {
+        webhook_url.trim()
+    };
     let truncated: String = log_snippet.chars().take(1600).collect();
     let payload = json!({
         "username": "PETABLOCKS Launcher Crash Reporter",
@@ -144,7 +148,90 @@ pub async fn submit_crash_webhook(
         .build()
         .map_err(|e| e.to_string())?;
     let res = client
-        .post(webhook_url)
+        .post(target_url)
+        .json(&payload)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+    if !res.status().is_success() {
+        return Err(format!("Discord webhook returned HTTP {}", res.status()));
+    }
+    Ok(())
+}
+
+pub async fn submit_beta_feedback(
+    webhook_url: &str,
+    category: &str,
+    title: &str,
+    description: &str,
+    player_name: &str,
+    contact: &str,
+    launcher_version: &str,
+    include_diagnostics: bool,
+    instance_id: &str,
+) -> Result<(), String> {
+    let target_url = if webhook_url.trim().is_empty() {
+        DEFAULT_BETA_WEBHOOK
+    } else {
+        webhook_url.trim()
+    };
+
+    let color = match category {
+        "bug" => 0xEF4444,
+        "crash" => 0xF97316,
+        _ => 0x0FCDF8,
+    };
+
+    let mut fields = vec![
+        json!({ "name": "Category", "value": category.to_uppercase(), "inline": true }),
+        json!({ "name": "Player", "value": if player_name.is_empty() { "Not signed in" } else { player_name }, "inline": true }),
+        json!({ "name": "Launcher", "value": format!("v{launcher_version} ({}/{})", std::env::consts::OS, std::env::consts::ARCH), "inline": true }),
+    ];
+
+    if !contact.trim().is_empty() {
+        fields.push(json!({ "name": "Discord / Contact", "value": contact.trim(), "inline": true }));
+    }
+
+    fields.push(json!({
+        "name": "Details",
+        "value": description.chars().take(1800).collect::<String>(),
+        "inline": false
+    }));
+
+    if include_diagnostics {
+        let settings = crate::settings::load_settings();
+        let java = crate::java::detect_java();
+        let state = crate::sync::load_state(instance_id);
+        let diag = format!(
+            "RAM: {} MB | Java: {} ({}) | Modpack: {} | Disabled Mods: {}",
+            settings.memory_mb,
+            java.version.unwrap_or_else(|| "Not installed".into()),
+            java.source,
+            state.installed_version.unwrap_or_else(|| "Not synced".into()),
+            state.disabled_mods.len()
+        );
+        fields.push(json!({
+            "name": "System Diagnostics",
+            "value": format!("```\n{diag}\n```"),
+            "inline": false
+        }));
+    }
+
+    let payload = json!({
+        "username": "PETABLOCKS Beta Feedback",
+        "embeds": [{
+            "title": format!("[BETA] {}", title.trim()),
+            "color": color,
+            "fields": fields
+        }]
+    });
+
+    let client = Client::builder()
+        .timeout(Duration::from_secs(15))
+        .build()
+        .map_err(|e| e.to_string())?;
+    let res = client
+        .post(target_url)
         .json(&payload)
         .send()
         .await

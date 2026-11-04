@@ -164,12 +164,8 @@ export default function Home({ session, onSession }: Props) {
     setSendingCrash(true);
     try {
       const s = await getSettings();
-      if (!s.crashWebhookUrl) {
-        setSyncError("Configure a Discord Crash Webhook URL in Settings first, or click Copy Crash Report.");
-        return;
-      }
       await submitCrashWebhook({
-        webhookUrl: s.crashWebhookUrl,
+        webhookUrl: s.crashWebhookUrl || "",
         playerName: session?.profile.name ?? "Unknown",
         instanceId: instance.id,
         summary: crashReport.summary,
