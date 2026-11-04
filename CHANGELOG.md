@@ -3,6 +3,16 @@
 All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.0] - 2026-11-04
+### Added
+- **In-Launcher Discord Account Linking & Closed Beta Role Gate (`src/components/AccountCard.tsx`, `src/pages/Home.tsx`, `src-tauri/src/community.rs`)**:
+  - Automatically queries the PETABLOCKS Central Identity Engine (`https://my.petablocks.com/api/public/launcher/status/:uuid`) once signed in with Microsoft to verify whether the player's Minecraft UUID is linked to a Discord account and in the official PETABLOCKS Discord server.
+  - Displays the player's linked Discord handle (`@username`), network rank badge (`Player`, `VIP`, `MVP`, `Admin`, `Owner`), and `Beta Verified` pill on the Account Card.
+  - Provides **two zero-friction ways to link Discord directly from the launcher** (without needing to launch Minecraft first):
+    1. **One-Click Link via Browser**: Opens `my.petablocks.com/api/public/oauth/discord` with the player's verified Minecraft UUID & IGN pre-attached and auto-polls every 8 seconds until linking completes.
+    2. **Get `/link` Code**: Generates a 15-minute `PB-XXXX` code directly inside the launcher (`POST /api/public/launcher/link-code`) with one-click copy for `/link code:PB-XXXX` in the PETABLOCKS Discord (`pb-bot`), which also awards the 32x Diamonds bonus on Season 2.
+  - Enforces the Closed Beta Discord gate on the **Play** button until both Microsoft sign-in and Discord server membership are verified.
+
 ## [1.6.0] - 2026-11-04
 ### Added
 - **Frameless Transparent Startup Splash Screen (`src/components/SplashScreen.tsx`, `src-tauri/tauri.conf.json`, `src-tauri/src/lib.rs`)**:

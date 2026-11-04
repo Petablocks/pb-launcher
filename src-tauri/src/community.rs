@@ -1,6 +1,6 @@
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use reqwest::Client;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::fs::{self, OpenOptions};
 use std::io::{Read, Write};
@@ -9,8 +9,70 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use crate::sync::instance_dir;
 
 const DISCORD_APP_ID: &str = "1302689041827651624";
+const PB_AUTH_BASE_URL: &str = "https://my.petablocks.com";
 const DEFAULT_BETA_WEBHOOK: &str =
     "https://discord.com/api/webhooks/1549560198153109604/9GcH_jClH30OosD3a_mJqDftiR9CQz1JiiZIUWiYpqucNCyZ6xKAuOODzri1cBKS353P";
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DiscordLinkStatus {
+    pub linked: bool,
+    pub discord_id: Option<String>,
+    pub discord_username: Option<String>,
+    pub rank: String,
+    pub in_guild: bool,
+    pub beta_eligible: bool,
+    pub pending_code: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LauncherLinkCodeResponse {
+    pub ok: bool,
+    pub code: String,
+    pub oauth_url: String,
+    pub expires_in_minutes: u32,
+}
+
+pub async fn check_discord_link(uuid: &str) -> Result<DiscordLinkStatus, String> {
+    let client = Client::builder()
+        .timeout(Duration::from_secs(12))
+        .build()
+        .map_err(|e| e.to_string())?;
+    let url = format!("{PB_AUTH_BASE_URL}/api/public/launcher/status/{uuid}");
+    let res = client
+        .get(&url)
+        .send()
+        .await
+        .map_err(|e| format!("Could not reach my.petablocks.com: {e}"))?;
+    if !res.status().is_success() {
+        return Err(format!("Identity server returned HTTP {}", res.status()));
+    }
+    res.json::<DiscordLinkStatus>().await.map_err(|e| e.to_string())
+}
+
+pub async fn request_discord_link_code(
+    uuid: &str,
+    username: &str,
+) -> Result<LauncherLinkCodeResponse, String> {
+    let client = Client::builder()
+        .timeout(Duration::from_secs(12))
+        .build()
+        .map_err(|e| e.to_string())?;
+    let url = format!("{PB_AUTH_BASE_URL}/api/public/launcher/link-code");
+    let res = client
+        .post(&url)
+        .json(&json!({ "uuid": uuid, "username": username }))
+        .send()
+        .await
+        .map_err(|e| format!("Could not reach my.petablocks.com: {e}"))?;
+    if !res.status().is_success() {
+        return Err(format!("Identity server returned HTTP {}", res.status()));
+    }
+    res.json::<LauncherLinkCodeResponse>()
+        .await
+        .map_err(|e| e.to_string())
+}
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
