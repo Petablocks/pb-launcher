@@ -3,6 +3,14 @@
 All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.8.3] - 2026-11-05
+### Fixed
+- **Windows Credential Manager Character Limit Resolution (`src-tauri/src/auth.rs`)**:
+  - Resolved `Attribute 'password encoded as UTF-16' is longer than platform limit of 2560 chars` error on Windows.
+  - Windows Credential Manager (`CredWriteW`) limits credential blobs to 5120 bytes (2560 UTF-16 code units). Large Minecraft Services JWT access tokens (~1.5 KB) serialized into the credential store previously exceeded this boundary.
+  - Decoupled token storage: the OS Keyring now strictly stores the lightweight OAuth refresh token and user profile (<250 bytes), while the ephemeral Minecraft services session token is safely cached in `session-cache.json` in the user's launcher directory.
+  - Full automatic cleanup on `logout()`.
+
 ## [1.8.2] - 2026-11-05
 ### Fixed
 - **Minecraft Authentication Rate-Limiting Protection (`TOO_MANY_REQUESTS`)**:
