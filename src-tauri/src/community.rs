@@ -307,7 +307,16 @@ pub async fn submit_beta_feedback(
 /// Lightweight Windows Discord IPC Rich Presence updater (`\\.\pipe\discord-ipc-0`).
 /// Best-effort: silently no-ops if Discord is not running locally.
 pub fn update_discord_rpc(details: &str, state_text: &str) {
-    for i in 0..4 {
+    update_discord_rpc_with_pid(details, state_text, std::process::id(), None);
+}
+
+pub fn update_discord_rpc_with_pid(
+    details: &str,
+    state_text: &str,
+    pid: u32,
+    custom_start: Option<u64>,
+) {
+    for i in 0..10 {
         let pipe_name = format!(r"\\.\pipe\discord-ipc-{i}");
         if let Ok(mut pipe) = OpenOptions::new().read(true).write(true).open(&pipe_name) {
             let handshake = json!({ "v": 1, "client_id": DISCORD_APP_ID }).to_string();
@@ -316,21 +325,30 @@ pub fn update_discord_rpc(details: &str, state_text: &str) {
             }
             let _ = read_ipc_frame(&mut pipe);
 
-            let now = SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .map(|d| d.as_secs())
-                .unwrap_or(0);
+            let start_time = custom_start.unwrap_or_else(|| {
+                SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .map(|d| d.as_secs())
+                    .unwrap_or(0)
+            });
+
             let cmd = json!({
                 "cmd": "SET_ACTIVITY",
                 "args": {
-                    "pid": std::process::id(),
+                    "pid": pid,
                     "activity": {
                         "details": details,
                         "state": state_text,
-                        "timestamps": { "start": now }
+                        "assets": {
+                            "large_image": "petablocks_logo",
+                            "large_text": "PETABLOCKS Season 2",
+                            "small_image": "minecraft",
+                            "small_text": "Minecraft 1.21.1 (NeoForge)"
+                        },
+                        "timestamps": { "start": start_time }
                     }
                 },
-                "nonce": format!("pb-{now}")
+                "nonce": format!("pb-{}", start_time)
             })
             .to_string();
             let _ = write_ipc_frame(&mut pipe, 1, cmd.as_bytes());

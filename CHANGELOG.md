@@ -3,6 +3,13 @@
 All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.8.1] - 2026-11-05
+### Fixed
+- **Discord Rich Presence Process Binding & Heartbeat (`src-tauri/src/community.rs`, `src-tauri/src/launch.rs`)**:
+  - Attached Discord Rich Presence directly to Minecraft's spawned process ID (`child.id()`) instead of the launcher GUI PID, ensuring Discord associates the presence activity with the actual Minecraft game window.
+  - Added a persistent 15-second heartbeat loop over `\\.\pipe\discord-ipc-*` so Discord maintains continuous presence without dropping or reverting to generic fallback boxes.
+  - Included application rich asset keys (`petablocks_logo` & `minecraft`) and session start timestamps.
+
 ## [1.8.0] - 2026-11-05
 ### Added
 - **Game Memory & JVM Tuning Profiles (`src/pages/Settings.tsx`, `src-tauri/src/settings.rs`)**:
