@@ -6,6 +6,7 @@ export interface LauncherSettings {
   memoryMb: number;
   customJavaPath: string | null;
   extraJvmArgs: string;
+  tuningPreset?: "eco" | "standard" | "enthusiast" | "custom";
   closeOnLaunch: boolean;
   directConnect: boolean;
   crashWebhookUrl?: string | null;
@@ -32,10 +33,11 @@ export interface GameLogLine {
 }
 
 const DEFAULT_SETTINGS: LauncherSettings = {
-  memoryMb: 6144,
+  memoryMb: 8192,
   customJavaPath: null,
+  tuningPreset: "standard",
   extraJvmArgs:
-    "-XX:+UseG1GC -XX:+ParallelRefProcEnabled -XX:MaxGCPauseMillis=200 -XX:+UnlockExperimentalVMOptions -XX:+DisableExplicitGC",
+    "-XX:+UseG1GC -XX:+ParallelRefProcEnabled -XX:MaxGCPauseMillis=200 -XX:+UnlockExperimentalVMOptions -XX:+DisableExplicitGC -XX:+AlwaysPreTouch",
   closeOnLaunch: true,
   directConnect: true,
   crashWebhookUrl: null,

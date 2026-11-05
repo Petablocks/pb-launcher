@@ -236,6 +236,20 @@ export default function Home({ session, onSession }: Props) {
               </span>
             )}
 
+            {serverStatus?.online && Boolean(serverStatus.playerSample?.length) && (
+              <div className="flex items-center gap-1 -ml-1">
+                {serverStatus.playerSample!.slice(0, 5).map((p) => (
+                  <img
+                    key={p.id}
+                    src={`https://crafthead.net/helm/${p.id}/20`}
+                    alt={p.name}
+                    title={`${p.name} is currently online`}
+                    className="h-5 w-5 rounded-md border border-white/20 bg-black/40"
+                  />
+                ))}
+              </div>
+            )}
+
             {latestVersion && (
               <span className="rounded-full bg-white/5 px-3 py-1 text-xs font-semibold text-pb-muted">
                 Modpack v{latestVersion} ({manifest?.mods.length ?? 0} client mods)

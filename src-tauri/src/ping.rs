@@ -7,11 +7,19 @@ use tokio::time::timeout;
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct PlayerSample {
+    pub name: String,
+    pub id: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ServerStatus {
     pub online: bool,
     pub latency_ms: Option<u64>,
     pub online_players: u32,
     pub max_players: u32,
+    pub player_sample: Vec<PlayerSample>,
     pub version_name: Option<String>,
     pub motd: Option<String>,
 }
@@ -134,6 +142,17 @@ pub async fn ping_server(address: &str) -> ServerStatus {
         let val: Value = serde_json::from_slice(&json_buf).map_err(|e| e.to_string())?;
         let online_players = val["players"]["online"].as_u64().unwrap_or(0) as u32;
         let max_players = val["players"]["max"].as_u64().unwrap_or(0) as u32;
+        let mut player_sample = Vec::new();
+        if let Some(samples) = val["players"]["sample"].as_array() {
+            for s in samples {
+                if let (Some(name), Some(id)) = (s["name"].as_str(), s["id"].as_str()) {
+                    player_sample.push(PlayerSample {
+                        name: strip_mc_formatting(name),
+                        id: id.to_string(),
+                    });
+                }
+            }
+        }
         let version_name = val["version"]["name"].as_str().map(String::from);
         let motd = extract_motd(&val["description"]);
 
@@ -142,6 +161,7 @@ pub async fn ping_server(address: &str) -> ServerStatus {
             latency_ms: Some(latency),
             online_players,
             max_players,
+            player_sample,
             version_name,
             motd,
         })
@@ -155,6 +175,7 @@ pub async fn ping_server(address: &str) -> ServerStatus {
             latency_ms: None,
             online_players: 0,
             max_players: 0,
+            player_sample: Vec::new(),
             version_name: None,
             motd: None,
         },
