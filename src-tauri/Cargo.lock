@@ -2538,7 +2538,7 @@ dependencies = [
 
 [[package]]
 name = "pb-launcher"
-version = "1.8.3"
+version = "1.8.4"
 dependencies = [
  "base64 0.22.1",
  "dirs 5.0.1",

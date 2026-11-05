@@ -3,6 +3,13 @@
 All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.8.4] - 2026-11-05
+### Fixed
+- **Bundled Override Mods Preservation (`src-tauri/src/sync.rs`)**:
+  - Prevented bundled mods from being purged during `cleanup_stale_mods()`. Bundled jars without external CDN URLs (`kotlinforforge-5.12.0-all.jar`, FTB, KubeJS) are now recognized as managed manifest entries and ignored by the HTTP downloader queue.
+- **Launcher Window Lifecycle & Resilience (`src-tauri/src/launch.rs`)**:
+  - Changed window minimize behavior on game launch: window minimizes rather than hiding completely, ensuring the taskbar entry remains accessible and restores automatically with focus even if Minecraft terminates abruptly in early JVM startup.
+
 ## [1.8.3] - 2026-11-05
 ### Fixed
 - **Windows Credential Manager Character Limit Resolution (`src-tauri/src/auth.rs`)**:

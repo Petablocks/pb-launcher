@@ -549,16 +549,16 @@ pub async fn launch_game(app: AppHandle, req: LaunchRequest) -> Result<(), Strin
         }
     });
 
-    if settings.close_on_launch {
-        if let Some(main_win) = app.get_webview_window("main") {
-            let _ = main_win.hide();
-        }
-    }
-
     let log_file_path = game_dir.join("launcher-game.log");
     let log_file = std::sync::Arc::new(std::sync::Mutex::new(
         std::fs::File::create(&log_file_path).ok(),
     ));
+
+    if settings.close_on_launch {
+        if let Some(main_win) = app.get_webview_window("main") {
+            let _ = main_win.minimize();
+        }
+    }
 
     if let Some(stdout) = child.stdout.take() {
         let app_clone = app.clone();
@@ -603,6 +603,7 @@ pub async fn launch_game(app: AppHandle, req: LaunchRequest) -> Result<(), Strin
         let elapsed = started_at.elapsed().as_secs();
         crate::sync::record_session_playtime(&inst_id, elapsed);
         crate::community::update_discord_rpc("In PETABLOCKS Launcher", "Ready to Play");
+        // Always restore the launcher window when game terminates
         if let Some(main_win) = app_wait.get_webview_window("main") {
             let _ = main_win.show();
             let _ = main_win.unminimize();
