@@ -506,10 +506,6 @@ pub async fn launch_game(app: AppHandle, req: LaunchRequest) -> Result<(), Strin
 
     let _ = app.emit("launch-status", "Starting Minecraft (NeoForge)...");
     let _ = app.emit("game-state", "running");
-    crate::community::update_discord_rpc(
-        "Playing PETABLOCKS Season 2",
-        &format!("Connected to {}", req.server_address),
-    );
 
     let mut child = TokioCommand::new(&java_exe)
         .current_dir(&game_dir)
@@ -518,6 +514,40 @@ pub async fn launch_game(app: AppHandle, req: LaunchRequest) -> Result<(), Strin
         .stderr(Stdio::piped())
         .spawn()
         .map_err(|e| format!("Failed to spawn Minecraft process: {e}"))?;
+
+    let game_pid = child.id().unwrap_or_else(|| std::process::id());
+    let server_addr = req.server_address.clone();
+    let rpc_start = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+
+    // Initial Discord update attached directly to Minecraft's process ID
+    crate::community::update_discord_rpc_with_pid(
+        "Playing PETABLOCKS Season 2",
+        &format!("Connected to {server_addr}"),
+        game_pid,
+        Some(rpc_start),
+    );
+
+    // Spawn a persistent heartbeat task that keeps Discord Rich Presence alive
+    let (rpc_tx, mut rpc_rx) = tokio::sync::mpsc::channel::<()>(1);
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(std::time::Duration::from_secs(15));
+        loop {
+            tokio::select! {
+                _ = interval.tick() => {
+                    crate::community::update_discord_rpc_with_pid(
+                        "Playing PETABLOCKS Season 2",
+                        &format!("Connected to {server_addr}"),
+                        game_pid,
+                        Some(rpc_start),
+                    );
+                }
+                _ = rpc_rx.recv() => break,
+            }
+        }
+    });
 
     if settings.close_on_launch {
         if let Some(main_win) = app.get_webview_window("main") {
@@ -569,6 +599,7 @@ pub async fn launch_game(app: AppHandle, req: LaunchRequest) -> Result<(), Strin
     let started_at = Instant::now();
     tokio::spawn(async move {
         let code = child.wait().await.ok().and_then(|s| s.code()).unwrap_or(-1);
+        let _ = rpc_tx.send(()).await;
         let elapsed = started_at.elapsed().as_secs();
         crate::sync::record_session_playtime(&inst_id, elapsed);
         crate::community::update_discord_rpc("In PETABLOCKS Launcher", "Ready to Play");
