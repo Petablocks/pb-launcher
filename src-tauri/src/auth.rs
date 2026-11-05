@@ -32,6 +32,10 @@ pub struct Profile {
 struct StoredAccount {
     refresh_token: String,
     profile: Profile,
+    #[serde(default)]
+    mc_token: Option<String>,
+    #[serde(default)]
+    mc_token_expires_at: Option<u64>,
 }
 
 #[derive(Serialize)]
@@ -209,7 +213,19 @@ async fn finish_login(client: &Client, ms_access: &str, refresh: &str) -> Result
         name: p["name"].as_str().ok_or("Missing profile name")?.to_string(),
     };
 
-    save_account(&StoredAccount { refresh_token: refresh.to_string(), profile: profile.clone() })?;
+    let expires_in = mc["expires_in"].as_u64().unwrap_or(86400);
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let mc_token_expires_at = now + expires_in.saturating_sub(600); // 10 min buffer
+
+    save_account(&StoredAccount {
+        refresh_token: refresh.to_string(),
+        profile: profile.clone(),
+        mc_token: Some(mc_token.clone()),
+        mc_token_expires_at: Some(mc_token_expires_at),
+    })?;
     Ok(Session { profile, access_token: mc_token, offline: false })
 }
 
@@ -224,9 +240,28 @@ async fn post_json(client: &Client, url: &str, body: Value) -> Result<Value, Str
     res.json().await.map_err(|e| e.to_string())
 }
 
-/// Restore the saved account at startup. Falls back to offline mode (cached profile) if the network is unreachable.
+/// Restore the saved account at startup.
+/// Optimizations:
+/// 1. Uses cached valid mc_token if it hasn't expired yet (prevents unnecessary Mojang rate-limit hits on restarts/updates).
+/// 2. If rate-limited (TOO_MANY_REQUESTS) or offline, falls back to existing cached token/profile rather than failing.
 pub async fn restore() -> Result<Option<Session>, String> {
     let Some(acc) = load_account() else { return Ok(None) };
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+
+    // Fast-path: if Minecraft token is still valid for at least 10 minutes, reuse it immediately!
+    if let (Some(token), Some(expires_at)) = (&acc.mc_token, acc.mc_token_expires_at) {
+        if expires_at > now && !token.trim().is_empty() {
+            return Ok(Some(Session {
+                profile: acc.profile,
+                access_token: token.clone(),
+                offline: false,
+            }));
+        }
+    }
+
     let client = http();
     let res = client
         .post(TOKEN_URL)
@@ -238,13 +273,37 @@ pub async fn restore() -> Result<Option<Session>, String> {
         ])
         .send()
         .await;
+
     let res = match res {
         Ok(r) => r,
-        Err(_) => return Ok(Some(Session { profile: acc.profile, access_token: String::new(), offline: true })),
+        Err(_) => {
+            return Ok(Some(Session {
+                profile: acc.profile,
+                access_token: acc.mc_token.unwrap_or_default(),
+                offline: true,
+            }))
+        }
     };
+
     let v: Value = res.json().await.map_err(|e| e.to_string())?;
     match (v["access_token"].as_str(), v["refresh_token"].as_str()) {
-        (Some(a), Some(r)) => finish_login(&client, a, r).await.map(Some),
+        (Some(a), Some(r)) => match finish_login(&client, a, r).await {
+            Ok(session) => Ok(Some(session)),
+            Err(e) if e.contains("TOO_MANY_REQUESTS") => {
+                // Rate limited by Mojang: fallback to cached token if available so player isn't blocked!
+                if let Some(token) = acc.mc_token {
+                    if !token.is_empty() {
+                        return Ok(Some(Session {
+                            profile: acc.profile,
+                            access_token: token,
+                            offline: false,
+                        }));
+                    }
+                }
+                Err(e)
+            }
+            Err(e) => Err(e),
+        },
         _ => {
             // Refresh token rejected: require a fresh sign-in.
             let _ = logout();
