@@ -33,12 +33,4 @@ npm run tauri build   # build the Windows installer
 
 
 ## Microsoft sign-in
-Uses the Microsoft device code flow (Xbox Live, XSTS, Minecraft services). The refresh token and cached profile are stored in the Windows Credential Manager; if the network is unavailable the cached account is shown in offline mode.
-
-Requires an Azure AD app registration (public client, "Personal Microsoft accounts only", device code flow enabled). Provide its Application (client) ID via the `PB_LAUNCHER_CLIENT_ID` environment variable at runtime or build time:
-
-```powershell
-$env:PB_LAUNCHER_CLIENT_ID = "<client-id>"; npm run tauri dev
-```
-
-Note: Minecraft services only accept tokens from approved Azure apps; see https://aka.ms/AppRegInfo to request access.
+Uses the Microsoft device code flow (Xbox Live, XSTS, Minecraft services) powered by the official Mojang-approved PETABLOCKS Azure Application (`acbc8721-204e-4445-8c3f-962fa445d718`). The refresh token and cached profile are stored in the Windows Credential Manager; if the network is unavailable the cached account is shown in offline mode.
