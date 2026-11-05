@@ -117,7 +117,7 @@ export default function Home({ session, onSession }: Props) {
       }
     }).then((u) => unlisteners.push(u));
     onGameLog((entry) => {
-      setLogs((prev) => [...prev.slice(-299), entry]);
+      setLogs((prev) => [...prev.slice(-999), entry]);
     }).then((u) => unlisteners.push(u));
 
     return () => {
@@ -383,13 +383,24 @@ export default function Home({ session, onSession }: Props) {
         <section className="mt-6 rounded-2xl border border-white/10 bg-pb-card p-4">
           <div className="mb-2 flex items-center justify-between text-xs font-bold text-pb-muted">
             <span>Live Game Output ({logs.length} lines)</span>
-            <button onClick={() => setLogs([])} className="hover:text-white">
-              Clear
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => {
+                  const text = logs.map((l) => l.line).join("\n");
+                  navigator.clipboard.writeText(text);
+                }}
+                className="inline-flex items-center gap-1 rounded bg-white/10 px-2.5 py-1 text-xs font-semibold text-white hover:bg-white/20"
+              >
+                <Copy size={12} /> Copy All Logs
+              </button>
+              <button onClick={() => setLogs([])} className="hover:text-white">
+                Clear
+              </button>
+            </div>
           </div>
-          <div className="max-h-56 overflow-y-auto rounded-xl bg-pb-bg p-3 font-mono text-[11px] leading-relaxed">
+          <div className="max-h-72 select-text overflow-y-auto rounded-xl bg-pb-bg p-3 font-mono text-[11px] leading-relaxed">
             {logs.map((l, idx) => (
-              <div key={idx} className={l.isError ? "text-red-400" : "text-pb-muted"}>
+              <div key={idx} className={`select-text ${l.isError ? "text-red-400" : "text-pb-muted"}`}>
                 {l.line}
               </div>
             ))}
