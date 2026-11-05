@@ -3,6 +3,12 @@
 All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.2] - 2026-11-05
+### Fixed
+- **Player Skin Rendering**: Migrated avatar and 3D body skin rendering from Minotar to Crafthead (`https://crafthead.net/armor/body/<uuid>`) for reliable full custom skin and overlay rendering.
+- **Process Spawning & Console Cleanup**: Added Windows `CREATE_NO_WINDOW` (0x08000000) flags to Java probing and the NeoForge installer commands so console windows no longer flash on screen during startup.
+- **Diagnostics & Error Visibility**: Added persistent logging to `launcher-game.log` in the instance directory. When the game process exits unexpectedly with a non-zero exit code, the launcher automatically opens the live **Game Logs** terminal and displays a diagnostic banner.
+
 ## [1.7.1] - 2026-11-05
 ### Changed
 - **Mojang Production Approval Transition**:

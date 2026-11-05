@@ -291,13 +291,17 @@ async fn setup_neoforge(
             .join(format!("neoforge-{neoforge_version}-installer.jar"));
         ensure_file(client, &installer_url, &installer_jar, None).await?;
 
-        let status = TokioCommand::new(java_exe)
-            .arg("-jar")
+        let mut cmd = TokioCommand::new(java_exe);
+        cmd.arg("-jar")
             .arg(&installer_jar)
             .arg("--installClient")
             .arg(root)
             .stdout(Stdio::null())
-            .stderr(Stdio::null())
+            .stderr(Stdio::null());
+        #[cfg(windows)]
+        cmd.creation_flags(0x08000000);
+
+        let status = cmd
             .status()
             .await
             .map_err(|e| format!("Failed to run NeoForge installer: {e}"))?;
@@ -509,11 +513,23 @@ pub async fn launch_game(app: AppHandle, req: LaunchRequest) -> Result<(), Strin
         }
     }
 
+    let log_file_path = game_dir.join("launcher-game.log");
+    let log_file = std::sync::Arc::new(std::sync::Mutex::new(
+        std::fs::File::create(&log_file_path).ok(),
+    ));
+
     if let Some(stdout) = child.stdout.take() {
         let app_clone = app.clone();
+        let file_clone = log_file.clone();
         tokio::spawn(async move {
             let mut lines = BufReader::new(stdout).lines();
             while let Ok(Some(line)) = lines.next_line().await {
+                if let Ok(mut f) = file_clone.lock() {
+                    if let Some(file) = f.as_mut() {
+                        use std::io::Write;
+                        let _ = writeln!(file, "{line}");
+                    }
+                }
                 let _ = app_clone.emit("game-log", GameLogLine { line, is_error: false });
             }
         });
@@ -521,9 +537,16 @@ pub async fn launch_game(app: AppHandle, req: LaunchRequest) -> Result<(), Strin
 
     if let Some(stderr) = child.stderr.take() {
         let app_clone = app.clone();
+        let file_clone = log_file.clone();
         tokio::spawn(async move {
             let mut lines = BufReader::new(stderr).lines();
             while let Ok(Some(line)) = lines.next_line().await {
+                if let Ok(mut f) = file_clone.lock() {
+                    if let Some(file) = f.as_mut() {
+                        use std::io::Write;
+                        let _ = writeln!(file, "[ERR] {line}");
+                    }
+                }
                 let _ = app_clone.emit("game-log", GameLogLine { line, is_error: true });
             }
         });

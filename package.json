@@ -1,6 +1,6 @@
 {
   "name": "pb-launcher",
-  "version": "1.7.1",
+  "version": "1.7.2",
   "description": "Official PETABLOCKS Minecraft Launcher",
   "private": true,
   "type": "module",
