@@ -1,7 +1,10 @@
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use std::fs;
 use std::time::Duration;
+
+use crate::sync::launcher_root;
 
 const KEYRING_SERVICE: &str = "com.petablocks.launcher";
 const KEYRING_USER: &str = "microsoft-account";
@@ -27,15 +30,46 @@ pub struct Profile {
     pub name: String,
 }
 
-/// Persisted in the OS credential store.
+/// Persisted in the OS credential store (Keyring / Windows Credential Manager).
+/// NOTE: Windows Credential Manager has a hard limit of 2560 UTF-16 code units (5120 bytes)
+/// on the password attribute. We keep ONLY the Microsoft OAuth refresh token and profile here
+/// (~150-250 bytes), well below the 2560 character limit.
 #[derive(Serialize, Deserialize)]
 struct StoredAccount {
     refresh_token: String,
     profile: Profile,
-    #[serde(default)]
-    mc_token: Option<String>,
-    #[serde(default)]
-    mc_token_expires_at: Option<u64>,
+}
+
+/// Cached Minecraft token cached on disk in the launcher directory (`session-cache.json`).
+/// Contains the large JWT (~1.5KB) and expiration timestamp to avoid Mojang rate-limits.
+#[derive(Serialize, Deserialize)]
+struct CachedToken {
+    mc_token: String,
+    expires_at: u64,
+}
+
+fn session_cache_path() -> std::path::PathBuf {
+    launcher_root().join("session-cache.json")
+}
+
+fn load_cached_token() -> Option<CachedToken> {
+    let p = session_cache_path();
+    let data = fs::read_to_string(&p).ok()?;
+    serde_json::from_str(&data).ok()
+}
+
+fn save_cached_token(mc_token: &str, expires_at: u64) {
+    let c = CachedToken {
+        mc_token: mc_token.to_string(),
+        expires_at,
+    };
+    if let Ok(json) = serde_json::to_string(&c) {
+        let _ = fs::write(session_cache_path(), json);
+    }
+}
+
+fn clear_cached_token() {
+    let _ = fs::remove_file(session_cache_path());
 }
 
 #[derive(Serialize)]
@@ -220,12 +254,15 @@ async fn finish_login(client: &Client, ms_access: &str, refresh: &str) -> Result
         .unwrap_or(0);
     let mc_token_expires_at = now + expires_in.saturating_sub(600); // 10 min buffer
 
+    // 1. Save small credentials (<200 chars) to Windows Credential Manager
     save_account(&StoredAccount {
         refresh_token: refresh.to_string(),
         profile: profile.clone(),
-        mc_token: Some(mc_token.clone()),
-        mc_token_expires_at: Some(mc_token_expires_at),
     })?;
+
+    // 2. Cache the larger Minecraft services JWT to local disk to avoid Windows 2560 char limits
+    save_cached_token(&mc_token, mc_token_expires_at);
+
     Ok(Session { profile, access_token: mc_token, offline: false })
 }
 
@@ -251,12 +288,14 @@ pub async fn restore() -> Result<Option<Session>, String> {
         .map(|d| d.as_secs())
         .unwrap_or(0);
 
-    // Fast-path: if Minecraft token is still valid for at least 10 minutes, reuse it immediately!
-    if let (Some(token), Some(expires_at)) = (&acc.mc_token, acc.mc_token_expires_at) {
-        if expires_at > now && !token.trim().is_empty() {
+    let cached = load_cached_token();
+
+    // Fast-path: if cached Minecraft token is still valid for at least 10 minutes, reuse it immediately!
+    if let Some(c) = &cached {
+        if c.expires_at > now && !c.mc_token.trim().is_empty() {
             return Ok(Some(Session {
                 profile: acc.profile,
-                access_token: token.clone(),
+                access_token: c.mc_token.clone(),
                 offline: false,
             }));
         }
@@ -279,7 +318,7 @@ pub async fn restore() -> Result<Option<Session>, String> {
         Err(_) => {
             return Ok(Some(Session {
                 profile: acc.profile,
-                access_token: acc.mc_token.unwrap_or_default(),
+                access_token: cached.map(|c| c.mc_token).unwrap_or_default(),
                 offline: true,
             }))
         }
@@ -291,11 +330,11 @@ pub async fn restore() -> Result<Option<Session>, String> {
             Ok(session) => Ok(Some(session)),
             Err(e) if e.contains("TOO_MANY_REQUESTS") => {
                 // Rate limited by Mojang: fallback to cached token if available so player isn't blocked!
-                if let Some(token) = acc.mc_token {
-                    if !token.is_empty() {
+                if let Some(c) = cached {
+                    if !c.mc_token.is_empty() {
                         return Ok(Some(Session {
                             profile: acc.profile,
-                            access_token: token,
+                            access_token: c.mc_token,
                             offline: false,
                         }));
                     }
@@ -313,6 +352,7 @@ pub async fn restore() -> Result<Option<Session>, String> {
 }
 
 pub fn logout() -> Result<(), String> {
+    clear_cached_token();
     match entry()?.delete_credential() {
         Ok(_) | Err(keyring::Error::NoEntry) => Ok(()),
         Err(e) => Err(e.to_string()),
