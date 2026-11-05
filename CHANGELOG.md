@@ -3,6 +3,13 @@
 All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.3] - 2026-11-05
+### Added
+- **One-Click Copy All Logs**: Added a dedicated **Copy All Logs** button in the Live Game Output header so full logs can be copied directly to clipboard with a single click.
+- **Enabled Text Selection in Game Output**: Enabled browser text selection (`select-text`) inside the log terminal viewer.
+- **Expanded Log History**: Increased retained live log buffer to 1,000 lines.
+- **Season 2 v0.19.0 Modpack Sync**: Bundled updated Season 2 `PETABLOCKS-Season-2-0.19.0.mrpack` archive.
+
 ## [1.7.2] - 2026-11-05
 ### Fixed
 - **Player Skin Rendering**: Migrated avatar and 3D body skin rendering from Minotar to Crafthead (`https://crafthead.net/armor/body/<uuid>`) for reliable full custom skin and overlay rendering.
