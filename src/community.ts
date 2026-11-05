@@ -1,11 +1,17 @@
 import { invoke } from "@tauri-apps/api/core";
 import { inTauri } from "./auth";
 
+export interface PlayerSample {
+  name: string;
+  id: string;
+}
+
 export interface ServerStatus {
   online: boolean;
   latencyMs: number | null;
   onlinePlayers: number;
   maxPlayers: number;
+  playerSample?: PlayerSample[];
   versionName: string | null;
   motd: string | null;
 }

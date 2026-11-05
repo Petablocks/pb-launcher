@@ -3,6 +3,19 @@
 All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.8.0] - 2026-11-05
+### Added
+- **Game Memory & JVM Tuning Profiles (`src/pages/Settings.tsx`, `src-tauri/src/settings.rs`)**:
+  - Introduced one-click performance presets tailored for Minecraft 1.21.1 and complex Create mod contraptions:
+    - **Eco (6 GB)**: Optimized for 8GB–12GB RAM systems with low background footprint and optimized G1GC.
+    - **Standard (8 GB - Recommended)**: Default profile with `-XX:+AlwaysPreTouch` and parallel ref processing for smooth chunk loading.
+    - **Enthusiast (12 GB - Generational ZGC)**: Advanced Java 21 Generational ZGC flags (`-XX:+UseZGC -XX:+ZGenerational`) providing sub-millisecond GC pauses and zero frame drops on high-spec hardware.
+  - Preserved continuous manual slider and custom argument input for power users.
+- **Live Online Player Heads Display (`src/pages/Home.tsx`, `src-tauri/src/ping.rs`)**:
+  - Extended Server List Ping (SLP) parser to capture active player samples and render live avatar heads alongside the online player counter.
+- **Enhanced Background Self-Updater Pipeline (`src/components/SplashScreen.tsx`, `src/App.tsx`, `src-tauri/src/updater.rs`)**:
+  - Silent startup checks and in-app top banner for instant, seamless 1-click update installations.
+
 ## [1.7.4] - 2026-11-05
 ### Fixed
 - **Resolved Java Module Resolution Collision (`ResolutionException`)**:

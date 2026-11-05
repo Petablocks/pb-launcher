@@ -73,6 +73,44 @@ export default function Settings() {
     }
   }
 
+  const TUNING_PRESETS = [
+    {
+      id: "eco" as const,
+      name: "Eco / Low-End (6 GB)",
+      desc: "Optimized for 8GB–12GB PCs. Lightweight G1GC tuning with minimal background footprint.",
+      ramMb: 6144,
+      jvmArgs:
+        "-XX:+UseG1GC -XX:+ParallelRefProcEnabled -XX:MaxGCPauseMillis=200 -XX:+UnlockExperimentalVMOptions -XX:+DisableExplicitGC",
+    },
+    {
+      id: "standard" as const,
+      name: "Standard (8 GB - Recommended)",
+      desc: "Balanced high-performance tuning for Season 2 Create contraptions and heavy mod loads.",
+      ramMb: 8192,
+      jvmArgs:
+        "-XX:+UseG1GC -XX:+ParallelRefProcEnabled -XX:MaxGCPauseMillis=200 -XX:+UnlockExperimentalVMOptions -XX:+DisableExplicitGC -XX:+AlwaysPreTouch",
+    },
+    {
+      id: "enthusiast" as const,
+      name: "Enthusiast (12 GB - Generational ZGC)",
+      desc: "High-spec 16GB+ systems with Java 21 Generational ZGC for ultra-low latency & zero stutter.",
+      ramMb: 12288,
+      jvmArgs:
+        "-XX:+UseZGC -XX:+ZGenerational -XX:+UnlockExperimentalVMOptions -XX:+DisableExplicitGC -XX:+AlwaysPreTouch",
+    },
+  ];
+
+  function applyPreset(presetId: "eco" | "standard" | "enthusiast") {
+    const p = TUNING_PRESETS.find((x) => x.id === presetId);
+    if (!p) return;
+    setSettings({
+      ...settings,
+      tuningPreset: presetId,
+      memoryMb: p.ramMb,
+      extraJvmArgs: p.jvmArgs,
+    });
+  }
+
   async function handleOpenInstanceFolder() {
     try {
       const dir = await getInstanceDir(instance.id);
@@ -179,42 +217,97 @@ export default function Settings() {
         </div>
       </section>
 
-      {/* Memory Allocation & JVM Flags */}
-      <section className="rounded-2xl border border-white/10 bg-pb-card p-6 space-y-5">
+      {/* Performance Tuning Presets & Memory Allocation */}
+      <section className="rounded-2xl border border-white/10 bg-pb-card p-6 space-y-6">
         <div>
           <div className="flex items-center justify-between">
-            <label className="text-sm font-bold">Memory Allocation (RAM)</label>
+            <div>
+              <h2 className="text-base font-bold">Game Memory & JVM Tuning Profiles</h2>
+              <p className="mt-0.5 text-xs text-pb-muted">
+                Pre-configured garbage collection profiles optimized for Adoptium OpenJDK 21 and heavy Create networks.
+              </p>
+            </div>
             <span className="rounded-lg bg-pb-cyan/15 px-2.5 py-1 text-xs font-extrabold text-pb-cyan">
               {settings.memoryMb} MB ({memoryGb} GB)
             </span>
           </div>
-          <p className="mt-1 text-xs text-pb-muted">
-            6 GB – 8 GB is recommended for PETABLOCKS Season 2 (160 mods + Create contraptions).
-          </p>
+
+          <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+            {TUNING_PRESETS.map((p) => {
+              const active = settings.tuningPreset === p.id || (settings.memoryMb === p.ramMb && settings.extraJvmArgs === p.jvmArgs);
+              return (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => applyPreset(p.id)}
+                  className={`flex flex-col justify-between rounded-xl border p-3.5 text-left transition ${
+                    active
+                      ? "border-pb-cyan bg-pb-cyan/10 shadow-sm shadow-pb-cyan/20 ring-1 ring-pb-cyan"
+                      : "border-white/10 bg-pb-bg hover:border-white/20 hover:bg-white/5"
+                  }`}
+                >
+                  <div>
+                    <div className="flex items-center justify-between">
+                      <span className={`text-xs font-extrabold ${active ? "text-pb-cyan" : "text-white"}`}>
+                        {p.name}
+                      </span>
+                      {active && <CheckCircle2 size={13} className="text-pb-cyan shrink-0 ml-1" />}
+                    </div>
+                    <p className="mt-1 text-[11px] leading-relaxed text-pb-muted">{p.desc}</p>
+                  </div>
+                  <div className="mt-3 flex items-center justify-between border-t border-white/5 pt-2 text-[10px] font-mono text-pb-muted">
+                    <span>RAM: {p.ramMb / 1024} GB</span>
+                    <span className="text-pb-mint/80">{p.id === "enthusiast" ? "ZGC Gen" : "G1GC"}</span>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div>
+          <div className="flex items-center justify-between">
+            <label className="text-xs font-bold text-white">Manual Memory Slider</label>
+            <span className="font-mono text-xs text-pb-muted">{memoryGb} GB</span>
+          </div>
           <input
             type="range"
             min={3072}
             max={16384}
             step={512}
             value={settings.memoryMb}
-            onChange={(e) => setSettings({ ...settings, memoryMb: Number(e.target.value) })}
-            className="mt-3 w-full accent-pb-cyan"
+            onChange={(e) =>
+              setSettings({
+                ...settings,
+                memoryMb: Number(e.target.value),
+                tuningPreset: "custom",
+              })
+            }
+            className="mt-2 w-full accent-pb-cyan"
           />
-          <div className="mt-1 flex justify-between text-[11px] text-pb-muted">
+          <div className="mt-1 flex justify-between text-[11px] text-pb-muted font-mono">
             <span>3 GB</span>
-            <span>6 GB (Recommended)</span>
-            <span>8 GB</span>
-            <span>12 GB</span>
+            <span>6 GB (Eco)</span>
+            <span>8 GB (Std)</span>
+            <span>12 GB (ZGC)</span>
             <span>16 GB</span>
           </div>
         </div>
 
         <div>
-          <label className="block text-xs font-semibold text-pb-muted">Additional JVM Arguments</label>
+          <label className="block text-xs font-semibold text-pb-muted">
+            Active JVM Arguments (Auto-managed or custom)
+          </label>
           <input
             type="text"
             value={settings.extraJvmArgs}
-            onChange={(e) => setSettings({ ...settings, extraJvmArgs: e.target.value })}
+            onChange={(e) =>
+              setSettings({
+                ...settings,
+                extraJvmArgs: e.target.value,
+                tuningPreset: "custom",
+              })
+            }
             className="mt-1.5 w-full rounded-xl border border-white/10 bg-pb-bg px-3 py-2 font-mono text-xs text-white focus:border-pb-cyan focus:outline-none"
           />
         </div>

@@ -10,11 +10,17 @@ pub struct LauncherSettings {
     pub memory_mb: u32,
     pub custom_java_path: Option<String>,
     pub extra_jvm_args: String,
+    #[serde(default = "default_tuning_preset")]
+    pub tuning_preset: String, // "eco", "standard", "enthusiast", "custom"
     #[serde(default = "default_true")]
     pub close_on_launch: bool,
     pub direct_connect: bool,
     #[serde(default)]
     pub crash_webhook_url: Option<String>,
+}
+
+fn default_tuning_preset() -> String {
+    "standard".to_string()
 }
 
 fn default_true() -> bool {
@@ -24,9 +30,10 @@ fn default_true() -> bool {
 impl Default for LauncherSettings {
     fn default() -> Self {
         Self {
-            memory_mb: 6144, // 6 GB recommended default for PETABLOCKS Season 2
+            memory_mb: 8192, // 8 GB default for optimal NeoForge + Create 1.21.1 performance
             custom_java_path: None,
-            extra_jvm_args: "-XX:+UseG1GC -XX:+ParallelRefProcEnabled -XX:MaxGCPauseMillis=200 -XX:+UnlockExperimentalVMOptions -XX:+DisableExplicitGC".into(),
+            tuning_preset: "standard".into(),
+            extra_jvm_args: "-XX:+UseG1GC -XX:+ParallelRefProcEnabled -XX:MaxGCPauseMillis=200 -XX:+UnlockExperimentalVMOptions -XX:+DisableExplicitGC -XX:+AlwaysPreTouch".into(),
             close_on_launch: true, // Hide launcher while playing and restore when Minecraft closes
             direct_connect: true,
             crash_webhook_url: None,
