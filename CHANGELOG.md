@@ -3,6 +3,13 @@
 All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.4] - 2026-11-05
+### Fixed
+- **Resolved Java Module Resolution Collision (`ResolutionException`)**:
+  - Removed vanilla client jar (`1.21.1.jar`) from the classpath when launching NeoForge. NeoForge's production client provider supplies the SRG/patched client (`client-1.21.1-20240808.144430-srg.jar`), defining module `minecraft`. Appending `1.21.1.jar` caused Java to load `1.21.1.jar` as automatic module `_1._21._1`, triggering a fatal `ResolutionException: Modules minecraft and _1._21._1 export package com.mojang.blaze3d.platform to module placebo`.
+- **Automatic Stale Mod Cleanup**:
+  - Added `cleanup_stale_mods()` to the sync pipeline. When syncing modpack versions, older/duplicate `.jar` files from prior modpack iterations (e.g., older `collective`, `emi_loot`, or `moonlight` jars) are automatically pruned from `mods/` while preserving player custom mods in `mods/custom/`.
+
 ## [1.7.3] - 2026-11-05
 ### Added
 - **One-Click Copy All Logs**: Added a dedicated **Copy All Logs** button in the Live Game Output header so full logs can be copied directly to clipboard with a single click.
