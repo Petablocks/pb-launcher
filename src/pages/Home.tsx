@@ -106,6 +106,8 @@ export default function Home({ session, onSession }: Props) {
         getSyncState(instance.id).then(setSyncState).catch(() => {});
         const code = Number(st.split(":")[1] ?? "0");
         if (code !== 0) {
+          setShowLogs(true);
+          setSyncError(`Game process exited unexpectedly with code ${code}. Check the Game Logs below for details.`);
           getLatestCrashReport(instance.id)
             .then((rep) => {
               if (rep) setCrashReport(rep);

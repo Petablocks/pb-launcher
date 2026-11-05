@@ -26,11 +26,22 @@ fn managed_runtime_dir() -> PathBuf {
     launcher_root().join("runtime").join("java-21")
 }
 
+#[cfg(windows)]
+use std::os::windows::process::CommandExt;
+
+#[cfg(windows)]
+const CREATE_NO_WINDOW: u32 = 0x08000000;
+
 fn probe_java(java_exe: &Path) -> Option<String> {
     if !java_exe.exists() {
         return None;
     }
-    let out = Command::new(java_exe).arg("-version").output().ok()?;
+    let mut cmd = Command::new(java_exe);
+    cmd.arg("-version");
+    #[cfg(windows)]
+    cmd.creation_flags(CREATE_NO_WINDOW);
+
+    let out = cmd.output().ok()?;
     let stderr = String::from_utf8_lossy(&out.stderr);
     let stdout = String::from_utf8_lossy(&out.stdout);
     let combined = format!("{stderr}\n{stdout}");

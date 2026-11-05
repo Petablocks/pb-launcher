@@ -18,5 +18,5 @@ export const completeLogin = (d: DeviceCodeInfo) =>
 export const restoreSession = () => (inTauri ? invoke<Session | null>("auth_restore") : Promise.resolve(null));
 export const logout = () => invoke<void>("auth_logout");
 
-export const avatarUrl = (uuid: string, size = 64) => `https://minotar.net/helm/${uuid}/${size}`;
-export const bodySkinUrl = (uuid: string, size = 128) => `https://minotar.net/armor/body/${uuid}/${size}.png`;
+export const avatarUrl = (uuid: string, size = 64) => `https://crafthead.net/helm/${uuid}/${size}`;
+export const bodySkinUrl = (uuid: string, _size = 128) => `https://crafthead.net/armor/body/${uuid}`;
