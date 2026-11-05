@@ -219,7 +219,7 @@ export default function Feedback({ session }: Props) {
               value={
                 session
                   ? `${session.profile.name} (Verified)`
-                  : "Not signed in (Pending Mojang Approval)"
+                  : "Not signed in"
               }
               className="mt-1.5 w-full rounded-xl border border-white/10 bg-pb-bg/60 px-3.5 py-2 text-xs font-semibold text-pb-muted"
             />
