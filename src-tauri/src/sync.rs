@@ -427,7 +427,11 @@ pub async fn sync_instance(
             .map(|h| h.eq_ignore_ascii_case(&m.sha1))
             .unwrap_or(false);
         if !valid {
-            to_download.push(m.clone());
+            // Only add to download queue if it has a valid download URL
+            // (Bundled mods without a CDN URL are restored via .mrpack overrides)
+            if !m.url.trim().is_empty() {
+                to_download.push(m.clone());
+            }
         }
     }
 
