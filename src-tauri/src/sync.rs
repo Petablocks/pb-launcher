@@ -500,6 +500,9 @@ pub async fn sync_instance(
     // 4. Copy any custom player mods from mods/custom/*.jar into mods/ (non-destructive)
     sync_custom_mods(&base_dir, &manifest)?;
 
+    // 5. Clean up stale/duplicate mod files from mods/ that are neither managed nor custom
+    cleanup_stale_mods(&base_dir, &manifest)?;
+
     state.installed_version = Some(manifest.version.clone());
     save_state(&instance_id, &state)?;
     emit("done", 1, 1, &format!("Up to date (v{})", manifest.version));
@@ -585,5 +588,45 @@ fn sync_custom_mods(base_dir: &Path, manifest: &LauncherManifest) -> Result<(), 
             }
         }
     }
+    Ok(())
+}
+
+fn cleanup_stale_mods(base_dir: &Path, manifest: &LauncherManifest) -> Result<(), String> {
+    let mods_dir = base_dir.join("mods");
+    let custom_dir = mods_dir.join("custom");
+
+    // All active filenames and disabled filenames declared in the current manifest
+    let mut allowed: HashSet<String> = HashSet::new();
+    for m in &manifest.mods {
+        if let Some(f) = Path::new(&m.path).file_name().map(|f| f.to_string_lossy().to_string()) {
+            let dis = format!("{f}.disabled");
+            allowed.insert(f);
+            allowed.insert(dis);
+        }
+    }
+
+    // Also allow any custom mods the player intentionally placed in mods/custom/
+    if let Ok(entries) = fs::read_dir(&custom_dir) {
+        for entry in entries.flatten() {
+            let fname = entry.file_name().to_string_lossy().to_string();
+            let dis = format!("{fname}.disabled");
+            allowed.insert(fname);
+            allowed.insert(dis);
+        }
+    }
+
+    // Inspect mods/ and remove any obsolete .jar or .jar.disabled from older modpack releases
+    if let Ok(entries) = fs::read_dir(&mods_dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_file() {
+                let fname = entry.file_name().to_string_lossy().to_string();
+                if (fname.ends_with(".jar") || fname.ends_with(".jar.disabled")) && !allowed.contains(&fname) {
+                    let _ = fs::remove_file(&path);
+                }
+            }
+        }
+    }
+
     Ok(())
 }

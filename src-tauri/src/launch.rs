@@ -431,11 +431,23 @@ pub async fn launch_game(app: AppHandle, req: LaunchRequest) -> Result<(), Strin
             cp_entries.push(p);
         }
     }
-    let vanilla_jar = root
-        .join("versions")
-        .join(&req.minecraft_version)
-        .join(format!("{}.jar", req.minecraft_version));
-    cp_entries.push(vanilla_jar.to_string_lossy().to_string());
+
+    // Only append the vanilla client jar if launching vanilla without NeoForge.
+    // NeoForge provides its own patched client provider (e.g. client-...-srg.jar)
+    // and defines module "minecraft". Appending vanilla 1.21.1.jar causes Java's
+    // ModuleLayer to see duplicate package exports between module "minecraft" and
+    // automatic module "_1._21._1" (ResolutionException).
+    if req.neoforge_version.trim().is_empty() {
+        let vanilla_jar = root
+            .join("versions")
+            .join(&req.minecraft_version)
+            .join(format!("{}.jar", req.minecraft_version));
+        cp_entries.push(vanilla_jar.to_string_lossy().to_string());
+    } else {
+        // Extra safeguard: strip any vanilla client jar from the NeoForge classpath
+        let vanilla_filename = format!("{}.jar", req.minecraft_version);
+        cp_entries.retain(|p| !p.ends_with(&vanilla_filename));
+    }
 
     let classpath = cp_entries.join(";");
     let asset_index_id = vanilla_json["assetIndex"]["id"]
