@@ -3,6 +3,22 @@
 All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.1] - 2026-11-06
+### Fixed
+- **Server List Ping SRV Record Resolution**:
+  - Implemented automatic DNS SRV resolution (`_minecraft._tcp.<domain>`) via secure Cloudflare DNS-over-HTTPS. Resolves `s2.petablocks.com` (port 11677) and `create2.petablocks.com` (port 11681), fixing the offline status bug.
+  - QuickPlay multiplayer direct-connect now passes the bare host string to Minecraft so the client natively leverages its internal SRV resolver.
+- **Sidebar Menu Navigation Overflow**:
+  - Widened the side navigation container (`w-56`, `shrink-0`) with graceful truncation and icon protection to prevent multi-line wrap on the "Beta Feedback" badge.
+- **Create 2 Instance Specifications**:
+  - Corrected loader and versions to **Minecraft 1.21.1** and **NeoForge 21.1.233**.
+
+### Changed
+- **Modpack Card Layout Polish**:
+  - Removed redundant text card titles from the bottom bar since the main 3D logos already state the modpack name.
+  - Replaced the word "Minecraft" with the official Minecraft Server block SVG icon.
+  - Replaced the word "NeoForge" with the official NeoForge pixel fox logo icon.
+
 ## [1.9.0] - 2026-11-06
 ### Added
 - **Multi-Modpack Split-Card Showcase Layout**:

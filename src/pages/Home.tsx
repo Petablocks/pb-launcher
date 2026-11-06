@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { INSTANCES, Instance } from "../instances";
 import AccountCard from "../components/AccountCard";
+import { MinecraftServerIcon } from "../components/MinecraftServerIcon";
 import { Session, inTauri } from "../auth";
 import {
   InstanceState,
@@ -292,13 +293,26 @@ export default function Home({ session, onSession }: Props) {
               </div>
 
               {/* Bottom Details & Launch Panel */}
-              <div className="relative z-10 border-t border-white/10 bg-black/50 p-5 backdrop-blur-md">
+              <div className="relative z-10 border-t border-white/10 bg-black/50 p-4 backdrop-blur-md">
                 <div className="flex items-center justify-between gap-4">
-                  <div>
-                    <h2 className="text-lg font-extrabold text-white">{inst.name}</h2>
-                    <p className="text-xs text-pb-muted">
-                      Minecraft {inst.minecraftVersion} • {inst.loader}
-                    </p>
+                  <div className="flex flex-wrap items-center gap-2.5 text-xs text-pb-muted">
+                    <span className="inline-flex items-center gap-1.5 font-semibold text-white/90">
+                      <MinecraftServerIcon size={16} />
+                      <span>{inst.minecraftVersion}</span>
+                    </span>
+                    <span className="text-white/20">•</span>
+                    <span className="inline-flex items-center gap-1.5 font-semibold text-white/90">
+                      <img
+                        src="/cards/neoforge-icon.png"
+                        alt="NeoForge"
+                        className="h-4 w-4 shrink-0 rounded-xs object-contain"
+                      />
+                      <span>
+                        {inst.neoforgeVersion
+                          ? inst.neoforgeVersion
+                          : inst.loader.replace(/NeoForge\s*|Forge\s*/i, "")}
+                      </span>
+                    </span>
                   </div>
 
                   {isPlayable ? (

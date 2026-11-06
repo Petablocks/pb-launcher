@@ -102,7 +102,7 @@ export default function App() {
       )}
 
       <div className="flex min-h-0 flex-1">
-        <nav className="flex w-52 flex-col border-r border-white/10 bg-pb-card p-3">
+        <nav className="flex w-56 shrink-0 flex-col border-r border-white/10 bg-pb-card p-3">
           <div className="flex-1 space-y-1">
             {NAV.map(({ id, label, icon: Icon, badge }) => {
               const active = tab === id;
@@ -110,18 +110,18 @@ export default function App() {
                 <button
                   key={id}
                   onClick={() => setTab(id)}
-                  className={`flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-sm font-semibold transition ${
+                  className={`flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2.5 text-sm font-semibold transition ${
                     active
                       ? "bg-pb-cyan/15 text-pb-cyan"
                       : "text-pb-muted hover:bg-white/5 hover:text-white"
                   }`}
                 >
-                  <span className="flex items-center gap-3">
-                    <Icon size={18} />
-                    {label}
+                  <span className="flex min-w-0 items-center gap-3 truncate">
+                    <Icon size={18} className="shrink-0" />
+                    <span className="truncate">{label}</span>
                   </span>
                   {badge && (
-                    <span className="rounded bg-pb-purple/20 px-1.5 py-0.5 text-[9px] font-extrabold tracking-wider text-pb-purple">
+                    <span className="shrink-0 rounded bg-pb-purple/20 px-1.5 py-0.5 text-[9px] font-extrabold tracking-wider text-pb-purple">
                       {badge}
                     </span>
                   )}

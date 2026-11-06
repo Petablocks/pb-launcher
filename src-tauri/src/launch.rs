@@ -505,14 +505,11 @@ pub async fn launch_game(app: AppHandle, req: LaunchRequest) -> Result<(), Strin
     full_args.extend(collect_args(&vanilla_json["arguments"]["game"], &vars));
     full_args.extend(collect_args(&nf_json["arguments"]["game"], &vars));
 
-    // Direct connect to s2.petablocks.com if enabled in settings
+    // Direct connect to server if enabled in settings
     if settings.direct_connect && !req.server_address.trim().is_empty() {
         full_args.push("--quickPlayMultiplayer".into());
-        let addr = if req.server_address.contains(':') {
-            req.server_address.clone()
-        } else {
-            format!("{}:25565", req.server_address)
-        };
+        // Pass bare hostname (e.g. s2.petablocks.com or create2.petablocks.com) so Minecraft client resolves SRV automatically
+        let addr = req.server_address.trim().to_string();
         full_args.push(addr);
     }
 
