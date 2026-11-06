@@ -56,7 +56,7 @@ export const INSTANCES: Instance[] = [
     manifestUrl: "",
     status: "coming_soon",
     logoImage: "/cards/logo-hungergames.png",
-    bgImage: "/cards/bg-season2.jpg",
+    bgImage: "/cards/bg-hungergames.jpg",
     description: "Competitive custom arena PvP survival. Fight for the crown and earn network badges.",
     badge: "Spring 2027",
     playLabel: "Coming Soon",
