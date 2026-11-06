@@ -55,15 +55,30 @@ fn probe_java(java_exe: &Path) -> Option<String> {
 }
 
 fn find_java_in_dir(dir: &Path) -> Option<PathBuf> {
-    let direct = dir.join("bin").join("java.exe");
-    if direct.exists() {
-        return Some(direct);
+    // Prefer javaw.exe on Windows to prevent console window from opening
+    #[cfg(windows)]
+    let preferred = "javaw.exe";
+    #[cfg(not(windows))]
+    let preferred = "java";
+
+    let direct_pref = dir.join("bin").join(preferred);
+    if direct_pref.exists() {
+        return Some(direct_pref);
     }
+    let direct_java = dir.join("bin").join("java.exe");
+    if direct_java.exists() {
+        return Some(direct_java);
+    }
+
     if let Ok(entries) = fs::read_dir(dir) {
         for entry in entries.flatten() {
-            let sub = entry.path().join("bin").join("java.exe");
-            if sub.exists() {
-                return Some(sub);
+            let sub_pref = entry.path().join("bin").join(preferred);
+            if sub_pref.exists() {
+                return Some(sub_pref);
+            }
+            let sub_java = entry.path().join("bin").join("java.exe");
+            if sub_java.exists() {
+                return Some(sub_java);
             }
         }
     }

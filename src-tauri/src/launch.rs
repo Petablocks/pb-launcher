@@ -507,11 +507,17 @@ pub async fn launch_game(app: AppHandle, req: LaunchRequest) -> Result<(), Strin
     let _ = app.emit("launch-status", "Starting Minecraft (NeoForge)...");
     let _ = app.emit("game-state", "running");
 
-    let mut child = TokioCommand::new(&java_exe)
+    let mut mc_cmd = TokioCommand::new(&java_exe);
+    mc_cmd
         .current_dir(&game_dir)
         .args(&full_args)
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
+        .stderr(Stdio::piped());
+
+    #[cfg(windows)]
+    mc_cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW: ensures no console window ever spawns
+
+    let mut child = mc_cmd
         .spawn()
         .map_err(|e| format!("Failed to spawn Minecraft process: {e}"))?;
 
