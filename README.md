@@ -1,6 +1,6 @@
 # PETABLOCKS Launcher
 
-**Version**: `v1.8.5` - Official Minecraft launcher for the [PETABLOCKS](https://petablocks.com) network.
+**Version**: `v1.9.0` - Official Minecraft launcher for the [PETABLOCKS](https://petablocks.com) network.
 
 Built with Tauri v2 (Rust) + React 19 + TypeScript + Tailwind CSS v4, using the official `petablocks-brand` design tokens.
 

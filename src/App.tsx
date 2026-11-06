@@ -102,7 +102,7 @@ export default function App() {
       )}
 
       <div className="flex min-h-0 flex-1">
-        <nav className="flex w-56 flex-col border-r border-white/10 bg-pb-card p-3">
+        <nav className="flex w-52 flex-col border-r border-white/10 bg-pb-card p-3">
           <div className="flex-1 space-y-1">
             {NAV.map(({ id, label, icon: Icon, badge }) => {
               const active = tab === id;
@@ -163,23 +163,49 @@ export default function App() {
             </button>
           </div>
         </nav>
-        <main className="min-w-0 flex-1 overflow-y-auto p-8">
-          {tab === "play" ? (
-            <Home session={session} onSession={setSession} />
-          ) : tab === "mods" ? (
-            <Mods />
-          ) : tab === "packs" ? (
-            <Packs />
-          ) : tab === "screenshots" ? (
-            <Screenshots />
-          ) : tab === "news" ? (
-            <News />
-          ) : tab === "feedback" ? (
-            <Feedback session={session} />
-          ) : (
-            <Settings />
-          )}
-        </main>
+        <div className="flex min-w-0 flex-1 flex-col">
+          <main className="min-w-0 flex-1 overflow-y-auto p-6">
+            {tab === "play" ? (
+              <Home session={session} onSession={setSession} />
+            ) : tab === "mods" ? (
+              <Mods />
+            ) : tab === "packs" ? (
+              <Packs />
+            ) : tab === "screenshots" ? (
+              <Screenshots />
+            ) : tab === "news" ? (
+              <News />
+            ) : tab === "feedback" ? (
+              <Feedback session={session} />
+            ) : (
+              <Settings />
+            )}
+          </main>
+
+          {/* Bottom Ticker Bar (HaulMP style) */}
+          <footer className="flex h-10 items-center justify-between border-t border-white/10 bg-[#060a12] px-6 text-xs text-pb-muted">
+            <div className="flex items-center gap-3 overflow-hidden">
+              <span className="flex items-center gap-1.5 font-bold text-white">
+                <Newspaper size={13} className="text-pb-cyan" />
+                What's new:
+              </span>
+              <span className="rounded bg-pb-cyan/20 px-1.5 py-0.5 text-[10px] font-extrabold text-pb-cyan">
+                SEASON 2
+              </span>
+              <span className="truncate text-white/80">
+                PETABLOCKS Season 2 (Minecraft 1.21.1 / NeoForge 21.1.259) is live on s2.petablocks.com!
+              </span>
+            </div>
+            <div className="flex items-center gap-4 shrink-0 font-medium">
+              <button
+                onClick={() => setTab("news")}
+                className="hover:text-pb-cyan transition cursor-pointer"
+              >
+                All Announcements →
+              </button>
+            </div>
+          </footer>
+        </div>
       </div>
     </div>
   );

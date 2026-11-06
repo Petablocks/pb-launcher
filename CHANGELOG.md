@@ -3,6 +3,18 @@
 All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.0] - 2026-11-06
+### Added
+- **Multi-Modpack Split-Card Showcase Layout**:
+  - Restyled home screen inspired by HaulMP with high-resolution artwork and 3D modpack logos.
+  - Card 1: **PETABLOCKS Season 2** (`s2.petablocks.com`, Minecraft 1.21.1 / NeoForge 21.1.259) with live server ping, direct play action, memory settings shortcut, and collapsible live logs/crash drawer.
+  - Card 2: **PETABLOCKS Create 2** (`create2.petablocks.com`, Minecraft 1.20.1 / Forge 47.3.0) with "Coming Soon" badge and live server status ping.
+  - Future modpack definitions added for Hunger Games (Spring 2027) and Patreon Supporter Server.
+- **Bottom News & Announcements Ticker**:
+  - Added live ticker banner along the launcher footer highlighting new modpack releases and updates.
+- **Enlarged Launcher Viewport**:
+  - Adjusted default window dimensions to 1200x760 (minimum 980x640) for comfortable multi-pack browsing and side-by-side card viewing.
+
 ## [1.8.6] - 2026-11-06
 ### Security
 - Prevented zip-slip in modpack override extraction; restricted updater installs to this repository's GitHub releases.

@@ -3,15 +3,17 @@ import {
   AlertTriangle,
   CheckCircle2,
   Clock,
-  Copy,
   DownloadCloud,
   Loader2,
   Play,
-  Send,
   Terminal,
   Users,
+  Wifi,
+  WifiOff,
+  ChevronRight,
+  Sparkles,
 } from "lucide-react";
-import { INSTANCES } from "../instances";
+import { INSTANCES, Instance } from "../instances";
 import AccountCard from "../components/AccountCard";
 import { Session, inTauri } from "../auth";
 import {
@@ -39,7 +41,6 @@ import {
   pingServer,
   submitCrashWebhook,
 } from "../community";
-import logo from "../assets/petablocks-logo-horizontal-512w.png";
 
 interface Props {
   session: Session | null;
@@ -47,7 +48,13 @@ interface Props {
 }
 
 export default function Home({ session, onSession }: Props) {
-  const instance = INSTANCES[0];
+  const [selectedId, setSelectedId] = useState<string>("petablocks-s2");
+  const selectedInstance = INSTANCES.find((i) => i.id === selectedId) ?? INSTANCES[0];
+
+  // Server ping statuses for all instances
+  const [serverStatuses, setServerStatuses] = useState<Record<string, ServerStatus>>({});
+
+  // Active instance sync / manifest
   const [manifest, setManifest] = useState<LauncherManifest | null>(null);
   const [syncState, setSyncState] = useState<InstanceState>({
     installedVersion: null,
@@ -57,40 +64,54 @@ export default function Home({ session, onSession }: Props) {
   const [progress, setProgress] = useState<SyncProgress | null>(null);
   const [syncError, setSyncError] = useState<string | null>(null);
 
+  // Launch & Game State
   const [launching, setLaunching] = useState(false);
   const [gameRunning, setGameRunning] = useState(false);
   const [launchStatus, setLaunchStatus] = useState<string | null>(null);
   const [logs, setLogs] = useState<GameLogLine[]>([]);
   const [showLogs, setShowLogs] = useState(false);
 
-  const [serverStatus, setServerStatus] = useState<ServerStatus | null>(null);
+  // Community / Crash / Discord
   const [discordStatus, setDiscordStatus] = useState<DiscordLinkStatus | null>(null);
   const [crashReport, setCrashReport] = useState<CrashReportInfo | null>(null);
   const [sendingCrash, setSendingCrash] = useState(false);
   const [crashSent, setCrashSent] = useState(false);
 
+  // Ping servers periodically
   useEffect(() => {
-    getSyncState(instance.id).then(setSyncState).catch(() => {});
-    if (inTauri) {
-      getManifest(instance.id, instance.manifestUrl)
-        .then(setManifest)
-        .catch(() => {});
-      pingServer(instance.serverAddress)
-        .then(setServerStatus)
-        .catch(() => {});
-    }
-
-    const pingInterval = setInterval(() => {
-      if (inTauri) {
-        pingServer(instance.serverAddress)
-          .then(setServerStatus)
+    async function pingAll() {
+      if (!inTauri) return;
+      for (const inst of INSTANCES) {
+        if (!inst.serverAddress) continue;
+        pingServer(inst.serverAddress)
+          .then((st) => {
+            setServerStatuses((prev) => ({ ...prev, [inst.id]: st }));
+          })
           .catch(() => {});
       }
-    }, 30000);
+    }
 
+    pingAll();
+    const interval = setInterval(pingAll, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Update manifest and sync state when instance changes
+  useEffect(() => {
+    if (!selectedInstance.manifestUrl) return;
+    getSyncState(selectedInstance.id).then(setSyncState).catch(() => {});
+    if (inTauri) {
+      getManifest(selectedInstance.id, selectedInstance.manifestUrl)
+        .then(setManifest)
+        .catch(() => {});
+    }
+  }, [selectedInstance.id, selectedInstance.manifestUrl]);
+
+  // Subscribe to Tauri events
+  useEffect(() => {
     const unlisteners: (() => void)[] = [];
     onSyncProgress((p) => {
-      if (p.instanceId === instance.id) setProgress(p);
+      if (p.instanceId === selectedInstance.id) setProgress(p);
     }).then((u) => unlisteners.push(u));
     onLaunchStatus((s) => setLaunchStatus(s)).then((u) => unlisteners.push(u));
     onGameState((st) => {
@@ -103,12 +124,12 @@ export default function Home({ session, onSession }: Props) {
         setGameRunning(false);
         setLaunching(false);
         setLaunchStatus(null);
-        getSyncState(instance.id).then(setSyncState).catch(() => {});
+        getSyncState(selectedInstance.id).then(setSyncState).catch(() => {});
         const code = Number(st.split(":")[1] ?? "0");
         if (code !== 0) {
           setShowLogs(true);
           setSyncError(`Game process exited unexpectedly with code ${code}. Check the Game Logs below for details.`);
-          getLatestCrashReport(instance.id)
+          getLatestCrashReport(selectedInstance.id)
             .then((rep) => {
               if (rep) setCrashReport(rep);
             })
@@ -121,16 +142,16 @@ export default function Home({ session, onSession }: Props) {
     }).then((u) => unlisteners.push(u));
 
     return () => {
-      clearInterval(pingInterval);
       unlisteners.forEach((u) => u());
     };
-  }, [instance.id, instance.manifestUrl, instance.serverAddress]);
+  }, [selectedInstance.id]);
 
   async function handleSync() {
+    if (selectedInstance.status !== "playable" || !selectedInstance.manifestUrl) return;
     setSyncing(true);
     setSyncError(null);
     try {
-      const next = await syncInstance(instance.id, instance.manifestUrl);
+      const next = await syncInstance(selectedInstance.id, selectedInstance.manifestUrl);
       setSyncState(next);
     } catch (e) {
       setSyncError(String(e));
@@ -140,22 +161,31 @@ export default function Home({ session, onSession }: Props) {
   }
 
   async function handlePlay() {
-    if (!session || session.offline || !session.access_token) return;
-    setSyncError(null);
-    setCrashReport(null);
+    if (selectedInstance.status !== "playable") return;
+    if (!session || session.offline || !session.access_token) {
+      setSyncError("Sign in with a verified Microsoft account owning Minecraft: Java Edition first.");
+      return;
+    }
+    if (discordStatus && (!discordStatus.linked || !discordStatus.inGuild)) {
+      setSyncError("Discord linking and Closed Beta membership required to play.");
+      return;
+    }
     setLaunching(true);
+    setSyncError(null);
     setLogs([]);
     try {
-      if (!isUpToDate) {
-        setLaunchStatus("Syncing modpack files before launch...");
-        const next = await syncInstance(instance.id, instance.manifestUrl);
+      if (selectedInstance.manifestUrl) {
+        setLaunchStatus("Checking modpack updates...");
+        const next = await syncInstance(selectedInstance.id, selectedInstance.manifestUrl);
         setSyncState(next);
       }
+
+      setLaunchStatus("Preparing Java 21 runtime & NeoForge...");
       await launchInstance({
-        instanceId: instance.id,
-        minecraftVersion: instance.minecraftVersion,
-        neoforgeVersion: manifest?.neoforge ?? instance.neoforgeVersion,
-        serverAddress: instance.serverAddress,
+        instanceId: selectedInstance.id,
+        minecraftVersion: selectedInstance.minecraftVersion,
+        neoforgeVersion: selectedInstance.neoforgeVersion ?? "21.1.259",
+        serverAddress: selectedInstance.serverAddress,
         session,
       });
     } catch (e) {
@@ -165,7 +195,7 @@ export default function Home({ session, onSession }: Props) {
     }
   }
 
-  async function handleSendCrashWebhook() {
+  async function handleSendCrashReport() {
     if (!crashReport) return;
     setSendingCrash(true);
     try {
@@ -173,7 +203,7 @@ export default function Home({ session, onSession }: Props) {
       await submitCrashWebhook({
         webhookUrl: s.crashWebhookUrl || "",
         playerName: session?.profile.name ?? "Unknown",
-        instanceId: instance.id,
+        instanceId: selectedInstance.id,
         summary: crashReport.summary,
         logSnippet: crashReport.content,
       });
@@ -198,238 +228,200 @@ export default function Home({ session, onSession }: Props) {
       : 0;
 
   return (
-    <div className="mx-auto max-w-3xl">
-      <img
-        src={logo}
-        alt="PETABLOCKS"
-        className="mb-8 h-14 object-contain object-left"
-        draggable={false}
-      />
+    <div className="flex h-full flex-col">
+      {/* Top Main Hero Split Showcase */}
+      <div className="grid min-h-[380px] flex-1 grid-cols-1 gap-4 lg:grid-cols-2">
+        {INSTANCES.slice(0, 2).map((inst) => {
+          const isSelected = inst.id === selectedId;
+          const status = serverStatuses[inst.id];
+          const isPlayable = inst.status === "playable";
 
-      <section className="relative overflow-hidden rounded-2xl border border-white/10 bg-pb-card p-8">
-        <div className="absolute -right-24 -top-24 h-72 w-72 rounded-full bg-pb-cyan/10 blur-3xl" />
-        <div className="absolute -bottom-24 -left-16 h-64 w-64 rounded-full bg-pb-purple/10 blur-3xl" />
-        <div className="relative">
-          {/* Status Pills */}
-          <div className="flex flex-wrap items-center gap-2">
+          return (
             <div
-              className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-bold ${
-                serverStatus?.online
-                  ? "bg-pb-mint/15 text-pb-mint"
-                  : "bg-white/10 text-pb-muted"
+              key={inst.id}
+              onClick={() => setSelectedId(inst.id)}
+              className={`group relative flex flex-col justify-between overflow-hidden rounded-2xl border transition-all duration-300 ${
+                isSelected
+                  ? "border-pb-cyan/80 ring-2 ring-pb-cyan/30 shadow-[0_0_30px_rgba(15,205,248,0.2)]"
+                  : "border-white/10 hover:border-white/30 cursor-pointer"
               }`}
             >
-              <span
-                className={`h-2 w-2 rounded-full ${
-                  serverStatus?.online ? "bg-pb-mint animate-pulse" : "bg-pb-muted"
-                }`}
+              {/* Background Art */}
+              <div
+                className="absolute inset-0 bg-cover bg-center transition-transform duration-700 group-hover:scale-105"
+                style={{ backgroundImage: `url(${inst.bgImage})` }}
               />
-              {instance.serverAddress}
-              {serverStatus?.online && serverStatus.latencyMs !== null && (
-                <span className="text-[11px] opacity-80">({serverStatus.latencyMs} ms)</span>
-              )}
-            </div>
 
-            {serverStatus?.online && (
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-pb-cyan/15 px-3 py-1 text-xs font-bold text-pb-cyan">
-                <Users size={12} /> {serverStatus.onlinePlayers} / {serverStatus.maxPlayers} Online
-              </span>
-            )}
+              {/* Ambient Vignette Gradients */}
+              <div className="absolute inset-0 bg-gradient-to-t from-[#060a12] via-[#060a12]/50 to-transparent" />
+              <div className="absolute inset-0 bg-gradient-to-r from-[#060a12]/70 via-transparent to-[#060a12]/70" />
 
-            {serverStatus?.online && Boolean(serverStatus.playerSample?.length) && (
-              <div className="flex items-center gap-1 -ml-1">
-                {serverStatus.playerSample!.slice(0, 5).map((p) => (
-                  <img
-                    key={p.id}
-                    src={`https://crafthead.net/helm/${p.id}/20`}
-                    alt={p.name}
-                    title={`${p.name} is currently online`}
-                    className="h-5 w-5 rounded-md border border-white/20 bg-black/40"
-                  />
-                ))}
-              </div>
-            )}
+              {/* Top Meta Header */}
+              <div className="relative z-10 flex items-center justify-between p-5">
+                <span className="rounded-full border border-white/20 bg-black/60 px-3 py-1 text-[11px] font-extrabold uppercase tracking-wider text-white backdrop-blur-md">
+                  {inst.badge ?? "Instance"}
+                </span>
 
-            {latestVersion && (
-              <span className="rounded-full bg-white/5 px-3 py-1 text-xs font-semibold text-pb-muted">
-                Modpack v{latestVersion} ({manifest?.mods.length ?? 0} client mods)
-              </span>
-            )}
-
-            {(syncState.totalPlaytimeSeconds ?? 0) >= 60 && (
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-pb-purple/15 px-3 py-1 text-xs font-bold text-pb-purple">
-                <Clock size={12} />{" "}
-                {Math.floor((syncState.totalPlaytimeSeconds ?? 0) / 3600)}h{" "}
-                {Math.floor(((syncState.totalPlaytimeSeconds ?? 0) % 3600) / 60)}m played
-              </span>
-            )}
-          </div>
-
-          <h1 className="mt-3 text-3xl font-extrabold">{instance.name}</h1>
-          <p className="mt-1 text-sm text-pb-muted">
-            Minecraft {instance.minecraftVersion} - {instance.loader}
-            {serverStatus?.motd ? ` • ${serverStatus.motd}` : ""}
-          </p>
-
-          <div className="mt-8 flex flex-wrap items-center gap-3">
-            <button
-              onClick={handlePlay}
-              disabled={!verifiedOnlineSession || !betaDiscordReady || syncing || launching || gameRunning}
-              className="pb-glow font-minecraft inline-flex cursor-pointer items-center gap-2.5 rounded-xl bg-pb-cyan px-8 py-3 text-xl tracking-wider text-[#031617] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {launching ? (
-                <>
-                  <Loader2 size={20} className="animate-spin" /> Launching...
-                </>
-              ) : gameRunning ? (
-                <>
-                  <CheckCircle2 size={20} /> Game Running
-                </>
-              ) : (
-                <>
-                  <Play size={20} fill="currentColor" /> Play
-                </>
-              )}
-            </button>
-
-            <button
-              onClick={handleSync}
-              disabled={syncing || launching || gameRunning || !inTauri}
-              className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-pb-cyan/40 bg-pb-cyan/15 px-5 py-3 text-sm font-extrabold text-pb-cyan transition hover:bg-pb-cyan/25 disabled:opacity-50"
-            >
-              {syncing ? (
-                <>
-                  <Loader2 size={18} className="animate-spin" /> Syncing Modpack...
-                </>
-              ) : isUpToDate ? (
-                <>
-                  <CheckCircle2 size={18} className="text-pb-mint" /> Synced (v{syncState.installedVersion})
-                </>
-              ) : (
-                <>
-                  <DownloadCloud size={18} />{" "}
-                  {syncState.installedVersion
-                    ? `Update to v${latestVersion ?? "latest"}`
-                    : "Sync Modpack"}
-                </>
-              )}
-            </button>
-
-            {logs.length > 0 && (
-              <button
-                onClick={() => setShowLogs(!showLogs)}
-                className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-xs font-bold text-pb-muted hover:text-white"
-              >
-                <Terminal size={15} /> {showLogs ? "Hide Logs" : "Game Logs"}
-              </button>
-            )}
-          </div>
-
-          {syncing && progress && (
-            <div className="mt-5">
-              <div className="flex justify-between text-xs text-pb-muted">
-                <span>{progress.detail}</span>
-                <span>{percent}%</span>
-              </div>
-              <div className="mt-1.5 h-2 w-full overflow-hidden rounded-full bg-white/10">
+                {/* Server Ping Badge */}
                 <div
-                  className="h-full bg-pb-cyan transition-all duration-200"
-                  style={{ width: `${percent}%` }}
+                  className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-bold backdrop-blur-md ${
+                    status?.online
+                      ? "border border-pb-mint/30 bg-pb-mint/20 text-pb-mint"
+                      : "border border-white/10 bg-black/60 text-pb-muted"
+                  }`}
+                >
+                  <span
+                    className={`h-2 w-2 rounded-full ${
+                      status?.online ? "animate-pulse bg-pb-mint" : "bg-neutral-500"
+                    }`}
+                  />
+                  {status?.online
+                    ? `${status.onlinePlayers} / ${status.maxPlayers} online`
+                    : inst.serverAddress}
+                </div>
+              </div>
+
+              {/* Center Floating Modpack Logo */}
+              <div className="relative z-10 flex flex-1 items-center justify-center p-4">
+                <img
+                  src={inst.logoImage}
+                  alt={inst.name}
+                  className="max-h-24 w-auto object-contain drop-shadow-[0_10px_25px_rgba(0,0,0,0.9)] transition-transform duration-300 group-hover:scale-105"
+                  draggable={false}
                 />
               </div>
-            </div>
-          )}
 
-          {launchStatus && (
-            <p className="mt-4 flex items-center gap-2 text-xs font-semibold text-pb-cyan">
-              <Loader2 size={13} className="animate-spin" /> {launchStatus}
-            </p>
-          )}
+              {/* Bottom Details & Launch Panel */}
+              <div className="relative z-10 border-t border-white/10 bg-black/50 p-5 backdrop-blur-md">
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <h2 className="text-lg font-extrabold text-white">{inst.name}</h2>
+                    <p className="text-xs text-pb-muted">
+                      Minecraft {inst.minecraftVersion} • {inst.loader}
+                    </p>
+                  </div>
 
-          {syncError && <p className="mt-3 text-xs text-red-400">{syncError}</p>}
-
-          <p className="mt-3 text-xs text-pb-muted">
-            {!verifiedOnlineSession
-              ? "Sign in with a verified Microsoft account owning Minecraft: Java Edition to enable Play."
-              : !discordStatus?.linked
-              ? "Link your Discord account below to verify Closed Beta access and unlock Play."
-              : !discordStatus?.inGuild
-              ? "Join the official PETABLOCKS Discord server below to unlock Closed Beta access."
-              : gameRunning
-              ? `Connected to ${instance.name}. Have fun!`
-              : "Ready to launch Minecraft 1.21.1 (NeoForge) and connect to s2.petablocks.com."}
-          </p>
-        </div>
-      </section>
-
-      {/* Crash Report Diagnostics Modal / Banner */}
-      {crashReport && (
-        <section className="mt-6 rounded-2xl border border-red-500/40 bg-red-500/10 p-5">
-          <div className="flex items-start justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <AlertTriangle size={22} className="shrink-0 text-red-400" />
-              <div>
-                <h2 className="text-sm font-bold text-white">Minecraft Crashed — {crashReport.filename}</h2>
-                <p className="mt-0.5 text-xs text-red-200">{crashReport.summary}</p>
+                  {isPlayable ? (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedId(inst.id);
+                        handlePlay();
+                      }}
+                      disabled={!verifiedOnlineSession || !betaDiscordReady || syncing || launching || gameRunning}
+                      className="font-minecraft inline-flex cursor-pointer items-center gap-2 rounded-xl bg-pb-cyan px-6 py-2.5 text-base font-extrabold tracking-wider text-[#031617] shadow-lg shadow-pb-cyan/20 transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {launching && isSelected ? (
+                        <>
+                          <Loader2 size={16} className="animate-spin" /> Launching
+                        </>
+                      ) : gameRunning && isSelected ? (
+                        <>
+                          <CheckCircle2 size={16} /> Running
+                        </>
+                      ) : (
+                        <>
+                          <Play size={16} fill="currentColor" /> {inst.playLabel ?? "Play"}
+                        </>
+                      )}
+                    </button>
+                  ) : (
+                    <div className="inline-flex items-center gap-2 rounded-xl border border-white/20 bg-white/10 px-4 py-2 text-xs font-bold text-pb-muted">
+                      <Clock size={14} /> {inst.playLabel ?? "Coming Soon"}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => navigator.clipboard.writeText(crashReport.content)}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-white/10 px-3 py-1.5 text-xs font-semibold text-white hover:bg-white/20"
-              >
-                <Copy size={13} /> Copy Crash Report
-              </button>
-              <button
-                onClick={handleSendCrashWebhook}
-                disabled={sendingCrash || crashSent}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-pb-cyan px-3 py-1.5 text-xs font-bold text-[#031617] hover:brightness-110 disabled:opacity-50"
-              >
-                <Send size={13} />{" "}
-                {crashSent ? "Sent to Support" : sendingCrash ? "Sending..." : "Send to PETABLOCKS Support"}
-              </button>
-            </div>
+          );
+        })}
+      </div>
+
+      {/* Syncing Progress Bar (if in progress) */}
+      {syncing && progress && (
+        <div className="mt-4 rounded-xl border border-pb-cyan/30 bg-pb-cyan/10 p-3">
+          <div className="flex justify-between text-xs font-bold text-white">
+            <span className="flex items-center gap-2">
+              <Loader2 size={13} className="animate-spin text-pb-cyan" /> {progress.detail}
+            </span>
+            <span className="text-pb-cyan">{percent}%</span>
           </div>
-        </section>
+          <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-black/40">
+            <div
+              className="h-full bg-pb-cyan transition-all duration-200"
+              style={{ width: `${percent}%` }}
+            />
+          </div>
+        </div>
       )}
 
-      {showLogs && logs.length > 0 && (
-        <section className="mt-6 rounded-2xl border border-white/10 bg-pb-card p-4">
-          <div className="mb-2 flex items-center justify-between text-xs font-bold text-pb-muted">
-            <span>Live Game Output ({logs.length} lines)</span>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => {
-                  const text = logs.map((l) => l.line).join("\n");
-                  navigator.clipboard.writeText(text);
-                }}
-                className="inline-flex items-center gap-1 rounded bg-white/10 px-2.5 py-1 text-xs font-semibold text-white hover:bg-white/20"
-              >
-                <Copy size={12} /> Copy All Logs
-              </button>
-              <button onClick={() => setLogs([])} className="hover:text-white">
-                Clear
-              </button>
+      {/* Error or Launch Status Alerts */}
+      {syncError && (
+        <div className="mt-4 flex items-center gap-2 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-300">
+          <AlertTriangle size={15} className="shrink-0 text-red-400" />
+          <span>{syncError}</span>
+        </div>
+      )}
+      {launchStatus && (
+        <div className="mt-4 flex items-center gap-2 rounded-xl border border-pb-cyan/30 bg-pb-cyan/10 p-3 text-xs text-pb-cyan">
+          <Loader2 size={15} className="animate-spin shrink-0" />
+          <span>{launchStatus}</span>
+        </div>
+      )}
+
+      {/* Account Authentication & Quick Sync Bar */}
+      <div className="mt-4">
+        <AccountCard
+          session={session}
+          onSession={onSession}
+          discordStatus={discordStatus}
+          onDiscordStatus={setDiscordStatus}
+          totalPlaytimeSeconds={syncState.totalPlaytimeSeconds}
+          sessionsPlayed={syncState.sessionsPlayed}
+        />
+      </div>
+
+      {/* Crash Reporter Bar (if crash occurred) */}
+      {crashReport && (
+        <div className="mt-4 rounded-xl border border-red-500/30 bg-red-500/10 p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h4 className="text-sm font-bold text-red-300">Minecraft Crash Detected</h4>
+              <p className="text-xs text-pb-muted">{crashReport.summary}</p>
             </div>
+            <button
+              onClick={handleSendCrashReport}
+              disabled={sendingCrash || crashSent}
+              className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg bg-red-500 px-3 py-1.5 text-xs font-bold text-white hover:bg-red-600 disabled:opacity-50"
+            >
+              {sendingCrash ? <Loader2 size={13} className="animate-spin" /> : <Terminal size={13} />}
+              {crashSent ? "Report Sent" : "Send Crash to Staff"}
+            </button>
           </div>
-          <div className="max-h-72 select-text overflow-y-auto rounded-xl bg-pb-bg p-3 font-mono text-[11px] leading-relaxed">
-            {logs.map((l, idx) => (
-              <div key={idx} className={`select-text ${l.isError ? "text-red-400" : "text-pb-muted"}`}>
+        </div>
+      )}
+
+      {/* Logs Drawer */}
+      {showLogs && (
+        <div className="mt-4 rounded-xl border border-white/10 bg-black/80 p-4">
+          <div className="mb-2 flex items-center justify-between">
+            <span className="text-xs font-bold text-white">Live Game Logs</span>
+            <button
+              onClick={() => setShowLogs(false)}
+              className="text-xs text-pb-muted hover:text-white"
+            >
+              Close
+            </button>
+          </div>
+          <div className="h-44 overflow-y-auto font-mono text-[11px] text-pb-muted">
+            {logs.map((l, i) => (
+              <div key={i} className={l.isError ? "text-red-400" : ""}>
                 {l.line}
               </div>
             ))}
           </div>
-        </section>
+        </div>
       )}
-
-      <AccountCard
-        session={session}
-        onSession={onSession}
-        totalPlaytimeSeconds={syncState.totalPlaytimeSeconds ?? 0}
-        sessionsPlayed={syncState.sessionsPlayed ?? 0}
-        discordStatus={discordStatus}
-        onDiscordStatus={setDiscordStatus}
-      />
     </div>
   );
 }
