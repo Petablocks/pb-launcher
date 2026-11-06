@@ -3,6 +3,25 @@
 All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.8.6] - 2026-11-06
+### Security
+- Prevented zip-slip in modpack override extraction; restricted updater installs to this repository's GitHub releases.
+- Removed the hardcoded Discord webhook (now injected at build time).
+- Verified Java runtime (SHA-256) and NeoForge installer (SHA-1) downloads; rejected path-escaping instance ids and pack filenames.
+
+### Fixed
+- Launcher no longer signs the user out on transient network/Xbox/Minecraft services errors.
+- Failed modpack override downloads are retried on the next sync instead of being marked installed.
+- Fixed Discord crash/feedback reports failing with HTTP 400 (embed field length limit).
+- Fixed "launcher already running" lockups: added single-instance guard, moved Discord Rich Presence off the main/async threads, and reveal the window if the splash stalls.
+- Java detection and game logs now use `java.exe` with `CREATE_NO_WINDOW` (still no console window).
+- Memory settings: `-Xms` can no longer exceed `-Xmx`, and RAM is capped at 75% of system memory.
+- Mod downloads and game files retry, verify hashes and are written atomically; stale mods are backed up to `mods/_removed`.
+
+### Changed
+- Screenshots gallery loads images lazily instead of embedding every PNG as base64.
+- CI checks version consistency, typechecks and runs tests before building a release.
+
 ## [1.8.5] - 2026-11-06
 ### Fixed
 - **Suppressed Java Console Window (`src-tauri/src/launch.rs`, `src-tauri/src/java.rs`)**:
