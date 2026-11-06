@@ -304,12 +304,14 @@ export default function Home({ session, onSession, discordStatus, onDiscordStatu
                     <span className="text-white/20">•</span>
                     <span className="inline-flex items-center gap-1.5 font-semibold text-white/90">
                       <img
-                        src="/cards/neoforge-icon.png"
-                        alt="NeoForge"
+                        src={inst.loaderIcon ?? "/cards/neoforge-icon.png"}
+                        alt={inst.loader}
                         className="h-4 w-4 shrink-0 rounded-xs object-contain"
                       />
                       <span>
-                        {inst.neoforgeVersion
+                        {inst.loaderVersion
+                          ? inst.loaderVersion
+                          : inst.neoforgeVersion
                           ? inst.neoforgeVersion
                           : inst.loader.replace(/NeoForge\s*|Forge\s*/i, "")}
                       </span>

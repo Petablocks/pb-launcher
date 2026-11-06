@@ -5,6 +5,8 @@ export interface Instance {
   minecraftVersion: string;
   neoforgeVersion?: string;
   loader: string;
+  loaderIcon?: string;
+  loaderVersion?: string;
   manifestUrl: string;
   status: "playable" | "coming_soon";
   logoImage: string;
@@ -22,6 +24,8 @@ export const INSTANCES: Instance[] = [
     minecraftVersion: "1.21.1",
     neoforgeVersion: "21.1.259",
     loader: "NeoForge 21.1.259",
+    loaderIcon: "/cards/neoforge-icon.png",
+    loaderVersion: "21.1.259",
     manifestUrl:
       "https://github.com/Petablocks/pb-launcher/releases/latest/download/launcher-manifest.json",
     status: "playable",
@@ -38,6 +42,8 @@ export const INSTANCES: Instance[] = [
     minecraftVersion: "1.21.1",
     neoforgeVersion: "21.1.233",
     loader: "NeoForge 21.1.233",
+    loaderIcon: "/cards/neoforge-icon.png",
+    loaderVersion: "21.1.233",
     manifestUrl:
       "https://github.com/Petablocks/pb-launcher/releases/latest/download/launcher-manifest-create2.json",
     status: "coming_soon",
@@ -51,8 +57,10 @@ export const INSTANCES: Instance[] = [
     id: "petablocks-hungergames",
     name: "PETABLOCKS Hunger Games",
     serverAddress: "hg.petablocks.com",
-    minecraftVersion: "1.21.1",
-    loader: "Vanilla / Fabric",
+    minecraftVersion: "Latest",
+    loader: "Paper",
+    loaderIcon: "/cards/paper-icon.png",
+    loaderVersion: "Paper",
     manifestUrl: "",
     status: "coming_soon",
     logoImage: "/cards/logo-hungergames.png",
@@ -66,7 +74,10 @@ export const INSTANCES: Instance[] = [
     name: "Patreon Supporter Server",
     serverAddress: "patreon.petablocks.com",
     minecraftVersion: "1.21.1",
+    neoforgeVersion: "21.1.259",
     loader: "NeoForge 21.1.259",
+    loaderIcon: "/cards/neoforge-icon.png",
+    loaderVersion: "21.1.259",
     manifestUrl: "",
     status: "coming_soon",
     logoImage: "/cards/logo-patreon.png",
