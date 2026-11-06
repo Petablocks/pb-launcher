@@ -21,7 +21,6 @@ export interface ScreenshotItem {
   path: string;
   size: number;
   modifiedEpoch: number;
-  dataUrl: string;
 }
 
 export interface CrashReportInfo {

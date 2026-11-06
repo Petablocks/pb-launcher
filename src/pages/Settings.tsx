@@ -10,6 +10,7 @@ import {
   Server,
 } from "lucide-react";
 import { openPath } from "@tauri-apps/plugin-opener";
+import { invoke } from "@tauri-apps/api/core";
 import { INSTANCES } from "../instances";
 import {
   JavaStatus,
@@ -41,8 +42,17 @@ export default function Settings() {
   const [installingJava, setInstallingJava] = useState(false);
   const [savedNotice, setSavedNotice] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Cap the slider at 75% of physical RAM (the backend enforces the same limit at launch).
+  const [maxMemoryMb, setMaxMemoryMb] = useState(16384);
 
   useEffect(() => {
+    if (inTauri) {
+      invoke<number>("system_memory_mb")
+        .then((total) => {
+          if (total > 0) setMaxMemoryMb(Math.max(3072, Math.min(16384, Math.floor((total * 0.75) / 512) * 512)));
+        })
+        .catch(() => {});
+    }
     getSettings().then(setSettings).catch(() => {});
     detectJava().then(setJava).catch(() => {});
   }, []);
@@ -273,9 +283,9 @@ export default function Settings() {
           <input
             type="range"
             min={3072}
-            max={16384}
+            max={maxMemoryMb}
             step={512}
-            value={settings.memoryMb}
+            value={Math.min(settings.memoryMb, maxMemoryMb)}
             onChange={(e) =>
               setSettings({
                 ...settings,

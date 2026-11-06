@@ -95,6 +95,13 @@ pub async fn check_for_update(current_version: &str) -> Result<LauncherUpdateInf
 }
 
 pub async fn install_update(app: AppHandle, download_url: String, version: String) -> Result<(), String> {
+    // Only ever run installers published on our own GitHub releases.
+    if !download_url.starts_with("https://github.com/Petablocks/pb-launcher/releases/download/") {
+        return Err("Refusing to install an update from an untrusted URL.".into());
+    }
+    if version.is_empty() || !version.chars().all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-') {
+        return Err("Invalid update version.".into());
+    }
     let _ = app.emit("updater-status", format!("Downloading PETABLOCKS Launcher v{version}..."));
 
     let client = Client::builder()
@@ -136,4 +143,16 @@ pub async fn install_update(app: AppHandle, download_url: String, version: Strin
         .map_err(|e| format!("Failed to start installer: {e}"))?;
 
     std::process::exit(0);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn semver_orders_numerically() {
+        assert!(parse_semver("v1.10.0") > parse_semver("1.9.9"));
+        assert_eq!(parse_semver("1.8"), (1, 8, 0));
+        assert_eq!(parse_semver("garbage"), (0, 0, 0));
+    }
 }

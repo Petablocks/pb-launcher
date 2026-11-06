@@ -30,10 +30,26 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
+      - name: Verify versions match (tag, package.json, Cargo.toml, tauri.conf.json, version.ts)
+        shell: bash
+        run: |
+          v=$(node -p "require('./package.json').version")
+          grep -q "^version = \"$v\"" src-tauri/Cargo.toml || { echo "Cargo.toml version != $v"; exit 1; }
+          grep -q "\"version\": \"$v\"" src-tauri/tauri.conf.json || { echo "tauri.conf.json version != $v"; exit 1; }
+          grep -q "\"$v\"" src/version.ts || { echo "src/version.ts version != $v"; exit 1; }
+          if [[ "$GITHUB_REF" == refs/tags/v* && "$GITHUB_REF_NAME" != "v$v" ]]; then echo "Tag $GITHUB_REF_NAME != v$v"; exit 1; fi
+
+      - name: Typecheck frontend
+        run: npx tsc -b
+
+      - name: Cargo check
+        run: cargo test --manifest-path src-tauri/Cargo.toml
+
       - name: Build Tauri NSIS installer
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PB_DEFAULT_WEBHOOK: ${{ secrets.PB_DEFAULT_WEBHOOK }}
         with:
           tagName: v__VERSION__
           releaseName: "PETABLOCKS Launcher v__VERSION__"

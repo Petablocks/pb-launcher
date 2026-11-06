@@ -107,6 +107,11 @@ fn settings_save(settings: LauncherSettings) -> Result<(), String> {
 }
 
 #[tauri::command]
+fn system_memory_mb() -> u64 {
+    settings::system_memory_mb()
+}
+
+#[tauri::command]
 fn java_detect() -> JavaStatus {
     java::detect_java()
 }
@@ -223,9 +228,31 @@ async fn discord_request_link_code(
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    community::update_discord_rpc("In PETABLOCKS Launcher", "Ready to Play");
     tauri::Builder::default()
+        // Must be first. A second launch surfaces the existing instance instead of silently
+        // piling up (or being blocked by) a hidden/stuck one.
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            if let Some(w) = app.get_webview_window("main") {
+                let _ = w.show();
+                let _ = w.unminimize();
+                let _ = w.set_focus();
+            }
+        }))
         .plugin(tauri_plugin_opener::init())
+        .setup(|app| {
+            // Discord IPC does blocking pipe I/O; never let it delay or hang startup.
+            std::thread::spawn(|| community::update_discord_rpc("In PETABLOCKS Launcher", "Ready to Play"));
+            // If the frontend never calls splash_complete (JS error, slow disk), don't leave an
+            // invisible process running: reveal the main window after 20s.
+            let handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                tokio::time::sleep(std::time::Duration::from_secs(20)).await;
+                if handle.get_webview_window("splash").is_some() {
+                    let _ = splash_complete(handle);
+                }
+            });
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             auth_start_login,
             auth_complete_login,
@@ -243,6 +270,7 @@ pub fn run() {
             packs_open_dir,
             settings_get,
             settings_save,
+            system_memory_mb,
             java_detect,
             java_install,
             launch_instance,

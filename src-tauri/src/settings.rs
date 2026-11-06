@@ -41,6 +41,13 @@ impl Default for LauncherSettings {
     }
 }
 
+/// Total physical RAM in MB (0 if unknown).
+pub fn system_memory_mb() -> u64 {
+    let mut sys = sysinfo::System::new();
+    sys.refresh_memory();
+    sys.total_memory() / (1024 * 1024)
+}
+
 fn settings_path() -> PathBuf {
     launcher_root().join("settings.json")
 }

@@ -313,41 +313,30 @@ pub async fn restore() -> Result<Option<Session>, String> {
         .send()
         .await;
 
-    let res = match res {
-        Ok(r) => r,
-        Err(_) => {
-            return Ok(Some(Session {
-                profile: acc.profile,
-                access_token: cached.map(|c| c.mc_token).unwrap_or_default(),
-                offline: true,
-            }))
-        }
-    };
+    let cached_token = cached.map(|c| c.mc_token).unwrap_or_default();
+    // Network/transient failure: keep the account, report offline so the UI can retry later.
+    let offline = |profile: Profile, token: String| Some(Session { profile, access_token: token, offline: true });
 
-    let v: Value = res.json().await.map_err(|e| e.to_string())?;
+    let Ok(res) = res else { return Ok(offline(acc.profile, cached_token)) };
+    let Ok(v) = res.json::<Value>().await else { return Ok(offline(acc.profile, cached_token)) };
+
     match (v["access_token"].as_str(), v["refresh_token"].as_str()) {
         (Some(a), Some(r)) => match finish_login(&client, a, r).await {
             Ok(session) => Ok(Some(session)),
-            Err(e) if e.contains("TOO_MANY_REQUESTS") => {
-                // Rate limited by Mojang: fallback to cached token if available so player isn't blocked!
-                if let Some(c) = cached {
-                    if !c.mc_token.is_empty() {
-                        return Ok(Some(Session {
-                            profile: acc.profile,
-                            access_token: c.mc_token,
-                            offline: false,
-                        }));
-                    }
-                }
-                Err(e)
+            Err(e) if e.contains("TOO_MANY_REQUESTS") && !cached_token.is_empty() => {
+                // Rate limited by Mojang: fallback to cached token so player isn't blocked!
+                Ok(Some(Session { profile: acc.profile, access_token: cached_token, offline: false }))
             }
-            Err(e) => Err(e),
+            // Xbox/Minecraft services unreachable or erroring: don't block or sign out.
+            Err(_) => Ok(offline(acc.profile, cached_token)),
         },
-        _ => {
-            // Refresh token rejected: require a fresh sign-in.
+        _ if v["error"].as_str() == Some("invalid_grant") => {
+            // Refresh token revoked/expired: require a fresh sign-in.
             let _ = logout();
             Ok(None)
         }
+        // Any other failure (5xx, throttling, temporarily_unavailable): keep credentials.
+        _ => Ok(offline(acc.profile, cached_token)),
     }
 }
 

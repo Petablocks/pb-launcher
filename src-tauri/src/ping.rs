@@ -181,3 +181,23 @@ pub async fn ping_server(address: &str) -> ServerStatus {
         },
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn varint_encoding() {
+        let mut b = Vec::new();
+        push_varint(&mut b, 300);
+        assert_eq!(b, [0xAC, 0x02]);
+        let mut b = Vec::new();
+        push_varint(&mut b, 767);
+        assert_eq!(b, [0xFF, 0x05]);
+    }
+
+    #[test]
+    fn strips_formatting() {
+        assert_eq!(strip_mc_formatting("§aHello §lWorld"), "Hello World");
+    }
+}

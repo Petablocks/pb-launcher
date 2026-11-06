@@ -41,7 +41,7 @@ pub struct GameLogLine {
 
 fn http() -> Client {
     Client::builder()
-        .user_agent("PETABLOCKS-Launcher/0.4.0")
+        .user_agent(concat!("PETABLOCKS-Launcher/", env!("CARGO_PKG_VERSION")))
         .timeout(Duration::from_secs(120))
         .build()
         .expect("http client")
@@ -73,6 +73,10 @@ fn rule_allows_windows(rules: Option<&Vec<Value>>) -> bool {
             continue;
         }
         if let Some(os) = rule.get("os") {
+            // We only target 64-bit x86; arm64/x86 rules never match.
+            if os["arch"].as_str().is_some_and(|a| a != "x86_64") {
+                continue;
+            }
             let os_name = os["name"].as_str().unwrap_or("");
             if os_name == "windows" {
                 allowed = action;
@@ -115,18 +119,7 @@ async fn ensure_file(client: &Client, url: &str, dest: &Path, expected_sha1: Opt
             return Ok(());
         }
     }
-    if let Some(parent) = dest.parent() {
-        tokio::fs::create_dir_all(parent).await.map_err(|e| e.to_string())?;
-    }
-    let bytes = client
-        .get(url)
-        .send()
-        .await
-        .map_err(|e| format!("GET {url}: {e}"))?
-        .bytes()
-        .await
-        .map_err(|e| format!("Read {url}: {e}"))?;
-    tokio::fs::write(dest, &bytes).await.map_err(|e| e.to_string())
+    crate::sync::download_to(client, url, dest, expected_sha1).await
 }
 
 async fn setup_vanilla(
@@ -289,7 +282,21 @@ async fn setup_neoforge(
         let installer_jar = root
             .join("cache")
             .join(format!("neoforge-{neoforge_version}-installer.jar"));
-        ensure_file(client, &installer_url, &installer_jar, None).await?;
+        // Maven publishes a .sha1 next to every artifact; verify the installer we are about to run.
+        let installer_sha1 = match client.get(format!("{installer_url}.sha1")).send().await {
+            Ok(r) if r.status().is_success() => r
+                .text()
+                .await
+                .ok()
+                .map(|t| t.trim().chars().take(40).collect::<String>())
+                .filter(|s| s.len() == 40),
+            _ => None,
+        };
+        // A previously cached installer of unknown provenance must not be trusted when we can verify.
+        if installer_sha1.is_some() && installer_jar.exists() {
+            let _ = fs::remove_file(&installer_jar);
+        }
+        ensure_file(client, &installer_url, &installer_jar, installer_sha1.as_deref()).await?;
 
         let mut cmd = TokioCommand::new(java_exe);
         cmd.arg("-jar")
@@ -410,7 +417,7 @@ pub async fn launch_game(app: AppHandle, req: LaunchRequest) -> Result<(), Strin
     fs::create_dir_all(&game_dir).map_err(|e| e.to_string())?;
 
     // 1. Ensure Java 21
-    let java_exe = ensure_java_21(&app).await?;
+    let java_exe = crate::java::cli_java(&ensure_java_21(&app).await?);
 
     // 2. Ensure Vanilla 1.21.1 + assets
     let client = http();
@@ -470,14 +477,19 @@ pub async fn launch_game(app: AppHandle, req: LaunchRequest) -> Result<(), Strin
     vars.insert("version_type", "release".into());
     vars.insert("natives_directory", natives_dir.to_string_lossy().to_string());
     vars.insert("launcher_name", "PETABLOCKS-Launcher".into());
-    vars.insert("launcher_version", "0.4.0".into());
+    vars.insert("launcher_version", env!("CARGO_PKG_VERSION").into());
     vars.insert("classpath", classpath);
     vars.insert("classpath_separator", ";".into());
     vars.insert("library_directory", libs_dir.to_string_lossy().to_string());
 
     let mut full_args: Vec<String> = Vec::new();
-    full_args.push(format!("-Xmx{}M", settings.memory_mb));
-    full_args.push("-Xms2048M".into());
+    // Xms must never exceed Xmx or the JVM refuses to start.
+    // Never hand the JVM more than 75% of physical RAM (min 2 GB), or the OS starts swapping.
+    let total_mb = crate::settings::system_memory_mb();
+    let cap = if total_mb > 0 { ((total_mb * 3 / 4).max(2048)) as u32 } else { u32::MAX };
+    let xmx = settings.memory_mb.max(1024).min(cap);
+    full_args.push(format!("-Xmx{xmx}M"));
+    full_args.push(format!("-Xms{}M", xmx.min(2048)));
     for extra in settings.extra_jvm_args.split_whitespace() {
         full_args.push(extra.to_string());
     }
@@ -543,12 +555,17 @@ pub async fn launch_game(app: AppHandle, req: LaunchRequest) -> Result<(), Strin
         loop {
             tokio::select! {
                 _ = interval.tick() => {
-                    crate::community::update_discord_rpc_with_pid(
-                        "Playing PETABLOCKS Season 2",
-                        &format!("Connected to {server_addr}"),
-                        game_pid,
-                        Some(rpc_start),
-                    );
+                    // Blocking pipe I/O: keep it off the async worker threads.
+                    let state = format!("Connected to {server_addr}");
+                    let _ = tokio::task::spawn_blocking(move || {
+                        crate::community::update_discord_rpc_with_pid(
+                            "Playing PETABLOCKS Season 2",
+                            &state,
+                            game_pid,
+                            Some(rpc_start),
+                        );
+                    })
+                    .await;
                 }
                 _ = rpc_rx.recv() => break,
             }
@@ -619,4 +636,36 @@ pub async fn launch_game(app: AppHandle, req: LaunchRequest) -> Result<(), Strin
     });
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn maven_coords() {
+        assert_eq!(
+            maven_coord_to_path("net.neoforged:neoforge:21.1.259").unwrap(),
+            "net/neoforged/neoforge/21.1.259/neoforge-21.1.259.jar"
+        );
+        assert_eq!(
+            maven_coord_to_path("a.b:c:1.0:natives@zip").unwrap(),
+            "a/b/c/1.0/c-1.0-natives.zip"
+        );
+        assert!(maven_coord_to_path("bad:coord").is_none());
+    }
+
+    #[test]
+    fn os_rules() {
+        let none: Vec<Value> = vec![];
+        assert!(!rule_allows_windows(Some(&none)));
+        assert!(rule_allows_windows(None));
+        let win = vec![json!({"action": "allow", "os": {"name": "windows"}})];
+        assert!(rule_allows_windows(Some(&win)));
+        let linux = vec![json!({"action": "allow", "os": {"name": "linux"}})];
+        assert!(!rule_allows_windows(Some(&linux)));
+        let arm = vec![json!({"action": "allow", "os": {"name": "windows", "arch": "arm64"}})];
+        assert!(!rule_allows_windows(Some(&arm)));
+    }
 }

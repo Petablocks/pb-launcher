@@ -1,4 +1,5 @@
 use reqwest::Client;
+use sha2::Digest;
 use serde::Serialize;
 use std::fs::{self, File};
 use std::io;
@@ -10,8 +11,9 @@ use tauri::{AppHandle, Emitter};
 use crate::settings::load_settings;
 use crate::sync::launcher_root;
 
-const ADOPTIUM_WINDOWS_X64_JRE21: &str =
-    "https://api.adoptium.net/v3/binary/latest/21/ga/windows/x64/jre/hotspot/normal/eclipse?project=jdk";
+/// Release metadata (download link + SHA-256) for the latest Temurin 21 Windows x64 JRE.
+const ADOPTIUM_WINDOWS_X64_JRE21_META: &str =
+    "https://api.adoptium.net/v3/assets/latest/21/hotspot?architecture=x64&image_type=jre&os=windows&vendor=eclipse";
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -32,11 +34,23 @@ use std::os::windows::process::CommandExt;
 #[cfg(windows)]
 const CREATE_NO_WINDOW: u32 = 0x08000000;
 
+/// `javaw.exe` is the GUI-subsystem binary and may print nothing for `-version` or when its
+/// stdio is piped, so use the sibling `java.exe` (with CREATE_NO_WINDOW) for probing and launching.
+pub fn cli_java(java_exe: &Path) -> PathBuf {
+    if java_exe.file_name().is_some_and(|n| n.eq_ignore_ascii_case("javaw.exe")) {
+        let sibling = java_exe.with_file_name("java.exe");
+        if sibling.exists() {
+            return sibling;
+        }
+    }
+    java_exe.to_path_buf()
+}
+
 fn probe_java(java_exe: &Path) -> Option<String> {
     if !java_exe.exists() {
         return None;
     }
-    let mut cmd = Command::new(java_exe);
+    let mut cmd = Command::new(cli_java(java_exe));
     cmd.arg("-version");
     #[cfg(windows)]
     cmd.creation_flags(CREATE_NO_WINDOW);
@@ -160,25 +174,41 @@ pub async fn ensure_java_21(app: &AppHandle) -> Result<PathBuf, String> {
     );
 
     let client = Client::builder()
-        .user_agent("PETABLOCKS-Launcher/0.4.0")
+        .user_agent(concat!("PETABLOCKS-Launcher/", env!("CARGO_PKG_VERSION")))
         .timeout(Duration::from_secs(300))
         .build()
         .map_err(|e| e.to_string())?;
 
-    let res = client
-        .get(ADOPTIUM_WINDOWS_X64_JRE21)
+    let meta: serde_json::Value = client
+        .get(ADOPTIUM_WINDOWS_X64_JRE21_META)
         .send()
         .await
-        .map_err(|e| format!("Failed to download Java 21: {e}"))?;
-
-    if !res.status().is_success() {
-        return Err(format!("Adoptium API returned HTTP {}", res.status()));
+        .and_then(|r| r.error_for_status())
+        .map_err(|e| format!("Failed to query Adoptium: {e}"))?
+        .json()
+        .await
+        .map_err(|e| format!("Invalid Adoptium response: {e}"))?;
+    let pkg = &meta[0]["binary"]["package"];
+    let link = pkg["link"].as_str().ok_or("Adoptium response had no download link")?;
+    let checksum = pkg["checksum"].as_str().ok_or("Adoptium response had no checksum")?;
+    if !link.starts_with("https://") {
+        return Err("Adoptium download link is not HTTPS.".into());
     }
 
-    let bytes = res
+    let bytes = client
+        .get(link)
+        .send()
+        .await
+        .and_then(|r| r.error_for_status())
+        .map_err(|e| format!("Failed to download Java 21: {e}"))?
         .bytes()
         .await
         .map_err(|e| format!("Failed reading Java 21 archive: {e}"))?;
+
+    let got = hex::encode(sha2::Sha256::digest(&bytes));
+    if !got.eq_ignore_ascii_case(checksum) {
+        return Err(format!("Java 21 download failed SHA-256 verification (expected {checksum}, got {got})."));
+    }
 
     let target_dir = managed_runtime_dir();
     let _ = fs::remove_dir_all(&target_dir);

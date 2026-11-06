@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { FolderOpen, Image as ImageIcon, Loader2, RefreshCw } from "lucide-react";
 import { openPath } from "@tauri-apps/plugin-opener";
+import { convertFileSrc } from "@tauri-apps/api/core";
 import { INSTANCES } from "../instances";
 import { ScreenshotItem, getScreenshotsDir, listScreenshots } from "../community";
 import { formatBytes } from "../sync";
@@ -93,7 +94,7 @@ export default function Screenshots() {
           {selected && (
             <div className="overflow-hidden rounded-2xl border border-white/10 bg-pb-card">
               <img
-                src={selected.dataUrl}
+                src={convertFileSrc(selected.path)}
                 alt={selected.filename}
                 className="max-h-96 w-full bg-pb-bg object-contain"
               />
@@ -126,7 +127,8 @@ export default function Screenshots() {
                   }`}
                 >
                   <img
-                    src={item.dataUrl}
+                    src={convertFileSrc(item.path)}
+                    loading="lazy"
                     alt={item.filename}
                     className="h-24 w-full object-cover transition group-hover:scale-105"
                   />

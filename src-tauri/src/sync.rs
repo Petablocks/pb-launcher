@@ -11,7 +11,7 @@ use tauri::{AppHandle, Emitter};
 use tokio::sync::Semaphore;
 
 const CONCURRENT_DOWNLOADS: usize = 6;
-const USER_AGENT: &str = "PETABLOCKS-Launcher/0.3.0";
+const USER_AGENT: &str = concat!("PETABLOCKS-Launcher/", env!("CARGO_PKG_VERSION"));
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -79,14 +79,62 @@ fn http() -> Client {
         .expect("http client")
 }
 
+/// Download `url` to `dest`: retries, HTTP status check, optional SHA-1 verification, and an
+/// atomic write (temp file + rename) so a crash never leaves a truncated file at `dest`.
+pub async fn download_to(client: &Client, url: &str, dest: &Path, sha1: Option<&str>) -> Result<(), String> {
+    if let Some(parent) = dest.parent() {
+        tokio::fs::create_dir_all(parent).await.map_err(|e| e.to_string())?;
+    }
+    let mut last = String::new();
+    for attempt in 0..3u64 {
+        if attempt > 0 {
+            tokio::time::sleep(Duration::from_millis(700 * attempt)).await;
+        }
+        let resp = match client.get(url).send().await.and_then(|r| r.error_for_status()) {
+            Ok(r) => r,
+            Err(e) => {
+                last = format!("GET {url}: {e}");
+                continue;
+            }
+        };
+        let bytes = match resp.bytes().await {
+            Ok(b) => b,
+            Err(e) => {
+                last = format!("Read {url}: {e}");
+                continue;
+            }
+        };
+        if let Some(expected) = sha1 {
+            let got = hex::encode(Sha1::digest(&bytes));
+            if !got.eq_ignore_ascii_case(expected) {
+                last = format!("SHA-1 mismatch for {url} (expected {expected}, got {got})");
+                continue;
+            }
+        }
+        let mut tmp = dest.as_os_str().to_owned();
+        tmp.push(".part");
+        let tmp = PathBuf::from(tmp);
+        tokio::fs::write(&tmp, &bytes).await.map_err(|e| e.to_string())?;
+        tokio::fs::rename(&tmp, dest).await.map_err(|e| e.to_string())?;
+        return Ok(());
+    }
+    Err(last)
+}
+
 pub fn launcher_root() -> PathBuf {
     dirs::data_dir()
         .unwrap_or_else(|| PathBuf::from("."))
         .join("PETABLOCKS Launcher")
 }
 
+/// Reject anything that could escape the instances folder (ids/filenames come from the webview).
+fn is_safe_component(s: &str) -> bool {
+    !s.is_empty() && s != "." && s != ".." && !s.contains(['/', '\\', ':', '\0'])
+}
+
 pub fn instance_dir(instance_id: &str) -> PathBuf {
-    launcher_root().join("instances").join(instance_id)
+    let id = if is_safe_component(instance_id) { instance_id } else { "invalid-instance" };
+    launcher_root().join("instances").join(id)
 }
 
 fn state_path(instance_id: &str) -> PathBuf {
@@ -139,15 +187,6 @@ pub async fn fetch_manifest(instance_id: &str, manifest_url: &str) -> Result<Lau
     let cached = cached_manifest_path(instance_id);
     if let Ok(text) = fs::read_to_string(&cached) {
         if let Ok(m) = serde_json::from_str(&text) {
-            return Ok(m);
-        }
-    }
-    let dev_fallback = PathBuf::from(r"c:\Users\michael\Documents\GitHub\petablocks-modpack-s2\dist\launcher-manifest.json");
-    if let Ok(text) = fs::read_to_string(&dev_fallback) {
-        if let Ok(m) = serde_json::from_str::<LauncherManifest>(&text) {
-            let dir = instance_dir(instance_id);
-            let _ = fs::create_dir_all(&dir);
-            let _ = fs::write(&cached, &text);
             return Ok(m);
         }
     }
@@ -357,6 +396,9 @@ pub fn set_pack_enabled(
     filename: &str,
     enabled: bool,
 ) -> Result<Vec<PackEntry>, String> {
+    if !is_safe_component(filename) {
+        return Err("Invalid pack filename.".into());
+    }
     let base_dir = instance_dir(instance_id);
     let folder = if kind == "shader" { "shaderpacks" } else { "resourcepacks" };
     let dir = base_dir.join(folder);
@@ -454,27 +496,9 @@ pub async fn sync_instance(
             handles.push(tokio::spawn(async move {
                 let _permit = sem.acquire().await.map_err(|e| e.to_string())?;
                 let dest = base.join(&m.path);
-                if let Some(parent) = dest.parent() {
-                    tokio::fs::create_dir_all(parent).await.map_err(|e| e.to_string())?;
-                }
-
-                let bytes = client
-                    .get(&m.url)
-                    .send()
-                    .await
-                    .map_err(|e| format!("{}: {e}", m.slug))?
-                    .bytes()
+                download_to(&client, &m.url, &dest, Some(&m.sha1))
                     .await
                     .map_err(|e| format!("{}: {e}", m.slug))?;
-
-                let mut hasher = Sha1::new();
-                hasher.update(&bytes);
-                let got = hex::encode(hasher.finalize());
-                if !got.eq_ignore_ascii_case(&m.sha1) {
-                    return Err(format!("SHA-1 mismatch for {} (expected {}, got {})", m.slug, m.sha1, got));
-                }
-
-                tokio::fs::write(&dest, &bytes).await.map_err(|e| e.to_string())?;
                 let done = completed.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
                 let _ = app.emit(
                     "sync-progress",
@@ -496,9 +520,14 @@ pub async fn sync_instance(
     }
 
     // 3. Apply overrides from .mrpack if version changed
+    // Only record the new version if overrides applied, so a failed fetch is retried next sync.
+    let mut overrides_ok = true;
     if state.installed_version.as_deref() != Some(&manifest.version) {
         emit("overrides", 0, 1, "Applying modpack configs & overrides...");
-        let _ = apply_mrpack_overrides(&base_dir, &manifest).await;
+        if let Err(e) = apply_mrpack_overrides(&base_dir, &manifest).await {
+            overrides_ok = false;
+            emit("overrides", 0, 1, &format!("Overrides not applied (will retry): {e}"));
+        }
     }
 
     // 4. Copy any custom player mods from mods/custom/*.jar into mods/ (non-destructive)
@@ -507,8 +536,10 @@ pub async fn sync_instance(
     // 5. Clean up stale/duplicate mod files from mods/ that are neither managed nor custom
     cleanup_stale_mods(&base_dir, &manifest)?;
 
-    state.installed_version = Some(manifest.version.clone());
-    save_state(&instance_id, &state)?;
+    if overrides_ok {
+        state.installed_version = Some(manifest.version.clone());
+        save_state(&instance_id, &state)?;
+    }
     emit("done", 1, 1, &format!("Up to date (v{})", manifest.version));
     Ok(state)
 }
@@ -539,38 +570,31 @@ async fn apply_mrpack_overrides(base_dir: &Path, manifest: &LauncherManifest) ->
             }
         }
     }
-    if mrpack_bytes.is_none() {
-        let local_mrpack = PathBuf::from(format!(
-            r"c:\Users\michael\Documents\GitHub\petablocks-modpack-s2\dist\PETABLOCKS-Season-2-{}.mrpack",
-            manifest.version
-        ));
-        mrpack_bytes = fs::read(local_mrpack).ok();
-    }
-
     let Some(bytes) = mrpack_bytes else {
-        return Ok(());
+        return Err("Could not download the modpack overrides (.mrpack).".into());
     };
 
     let reader = std::io::Cursor::new(bytes);
     let mut archive = zip::ZipArchive::new(reader).map_err(|e| e.to_string())?;
     for i in 0..archive.len() {
         let mut entry = archive.by_index(i).map_err(|e| e.to_string())?;
-        let name = entry.name().replace('\\', "/");
-        let Some(rel) = name.strip_prefix("overrides/") else { continue };
-        if rel.is_empty() || entry.is_dir() {
+        // enclosed_name() rejects `..` / absolute paths (zip-slip)
+        let Some(path) = entry.enclosed_name() else { continue };
+        let Ok(rel_path) = path.strip_prefix("overrides") else { continue };
+        if rel_path.as_os_str().is_empty() || entry.is_dir() {
             continue;
         }
-        let dest = base_dir.join(rel);
+        let rel = rel_path.to_string_lossy().replace('\\', "/");
+        let dest = base_dir.join(rel_path);
         // Preserve existing user options.txt & servers.dat if already created
         if (rel == "options.txt" || rel == "servers.dat") && dest.exists() {
             continue;
         }
         if let Some(parent) = dest.parent() {
-            let _ = fs::create_dir_all(parent);
+            fs::create_dir_all(parent).map_err(|e| e.to_string())?;
         }
-        if let Ok(mut out) = File::create(&dest) {
-            let _ = io::copy(&mut entry, &mut out);
-        }
+        let mut out = File::create(&dest).map_err(|e| format!("{rel}: {e}"))?;
+        io::copy(&mut entry, &mut out).map_err(|e| format!("{rel}: {e}"))?;
     }
     Ok(())
 }
@@ -626,11 +650,29 @@ fn cleanup_stale_mods(base_dir: &Path, manifest: &LauncherManifest) -> Result<()
             if path.is_file() {
                 let fname = entry.file_name().to_string_lossy().to_string();
                 if (fname.ends_with(".jar") || fname.ends_with(".jar.disabled")) && !allowed.contains(&fname) {
-                    let _ = fs::remove_file(&path);
+                    // Back up instead of deleting, so a jar a player dropped in mods/ is recoverable.
+                    let backup = mods_dir.join("_removed");
+                    if fs::create_dir_all(&backup).is_ok() && fs::rename(&path, backup.join(&fname)).is_err() {
+                        let _ = fs::remove_file(&path);
+                    }
                 }
             }
         }
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn rejects_path_escapes() {
+        for bad in ["", ".", "..", "a/b", "a\\b", "C:", "a\0b"] {
+            assert!(!is_safe_component(bad), "{bad:?}");
+        }
+        assert!(is_safe_component("petablocks-s2"));
+        assert!(instance_dir("../../x").ends_with("invalid-instance"));
+    }
 }

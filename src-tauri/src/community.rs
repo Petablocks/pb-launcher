@@ -1,4 +1,3 @@
-use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -10,8 +9,24 @@ use crate::sync::instance_dir;
 
 const DISCORD_APP_ID: &str = "1302689041827651624";
 const PB_AUTH_BASE_URL: &str = "https://my.petablocks.com";
-const DEFAULT_BETA_WEBHOOK: &str =
-    "https://discord.com/api/webhooks/1549560198153109604/REDACTED";
+/// Default report webhook, injected at build time (`PB_DEFAULT_WEBHOOK`, a CI secret); never committed.
+const DEFAULT_BETA_WEBHOOK: Option<&str> = option_env!("PB_DEFAULT_WEBHOOK");
+
+/// Discord rejects embed field values over 1024 chars; stay under it.
+fn trunc(s: &str, max: usize) -> String {
+    s.chars().take(max).collect()
+}
+
+fn resolve_webhook(user_url: &str) -> Result<String, String> {
+    let u = user_url.trim();
+    if !u.is_empty() {
+        return Ok(u.to_string());
+    }
+    DEFAULT_BETA_WEBHOOK
+        .filter(|s| !s.is_empty())
+        .map(String::from)
+        .ok_or_else(|| "No report webhook is configured. Add one in Settings.".to_string())
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -81,7 +96,6 @@ pub struct ScreenshotItem {
     pub path: String,
     pub size: u64,
     pub modified_epoch: u64,
-    pub data_url: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -116,16 +130,12 @@ pub fn list_screenshots(instance_id: &str) -> Result<Vec<ScreenshotItem>, String
                     .map(|d| d.as_secs())
                     .unwrap_or(0);
 
-                if let Ok(bytes) = fs::read(&path) {
-                    let b64 = BASE64.encode(&bytes);
-                    items.push(ScreenshotItem {
-                        filename: fname,
-                        path: path.to_string_lossy().to_string(),
-                        size: meta.len(),
-                        modified_epoch,
-                        data_url: format!("data:image/png;base64,{b64}"),
-                    });
-                }
+                items.push(ScreenshotItem {
+                    filename: fname,
+                    path: path.to_string_lossy().to_string(),
+                    size: meta.len(),
+                    modified_epoch,
+                });
             }
         }
     }
@@ -146,7 +156,7 @@ pub fn latest_crash_report(instance_id: &str) -> Option<CrashReportInfo> {
     let mut latest: Option<(u64, std::path::PathBuf, String)> = None;
 
     for entry in entries.flatten() {
-        let meta = entry.metadata().ok()?;
+        let Ok(meta) = entry.metadata() else { continue };
         if !meta.is_file() {
             continue;
         }
@@ -186,20 +196,16 @@ pub async fn submit_crash_webhook(
     summary: &str,
     log_snippet: &str,
 ) -> Result<(), String> {
-    let target_url = if webhook_url.trim().is_empty() {
-        DEFAULT_BETA_WEBHOOK
-    } else {
-        webhook_url.trim()
-    };
-    let truncated: String = log_snippet.chars().take(1600).collect();
+    let target_url = resolve_webhook(webhook_url)?;
+    let truncated = trunc(log_snippet, 950);
     let payload = json!({
         "username": "PETABLOCKS Launcher Crash Reporter",
         "embeds": [{
             "title": format!("Crash Report — {instance_id}"),
             "color": 0x0FCDF8,
             "fields": [
-                { "name": "Player", "value": player_name, "inline": true },
-                { "name": "Summary", "value": summary, "inline": false },
+                { "name": "Player", "value": trunc(player_name, 100), "inline": true },
+                { "name": "Summary", "value": trunc(summary, 1000), "inline": false },
                 { "name": "Log Excerpt", "value": format!("```\n{truncated}\n```"), "inline": false }
             ]
         }]
@@ -232,11 +238,7 @@ pub async fn submit_beta_feedback(
     include_diagnostics: bool,
     instance_id: &str,
 ) -> Result<(), String> {
-    let target_url = if webhook_url.trim().is_empty() {
-        DEFAULT_BETA_WEBHOOK
-    } else {
-        webhook_url.trim()
-    };
+    let target_url = resolve_webhook(webhook_url)?;
 
     let color = match category {
         "bug" => 0xEF4444,
@@ -246,17 +248,17 @@ pub async fn submit_beta_feedback(
 
     let mut fields = vec![
         json!({ "name": "Category", "value": category.to_uppercase(), "inline": true }),
-        json!({ "name": "Player", "value": if player_name.is_empty() { "Not signed in" } else { player_name }, "inline": true }),
+        json!({ "name": "Player", "value": if player_name.is_empty() { "Not signed in".to_string() } else { trunc(player_name, 100) }, "inline": true }),
         json!({ "name": "Launcher", "value": format!("v{launcher_version} ({}/{})", std::env::consts::OS, std::env::consts::ARCH), "inline": true }),
     ];
 
     if !contact.trim().is_empty() {
-        fields.push(json!({ "name": "Discord / Contact", "value": contact.trim(), "inline": true }));
+        fields.push(json!({ "name": "Discord / Contact", "value": trunc(contact.trim(), 200), "inline": true }));
     }
 
     fields.push(json!({
         "name": "Details",
-        "value": description.chars().take(1800).collect::<String>(),
+        "value": trunc(description, 1000),
         "inline": false
     }));
 
@@ -282,7 +284,7 @@ pub async fn submit_beta_feedback(
     let payload = json!({
         "username": "PETABLOCKS Beta Feedback",
         "embeds": [{
-            "title": format!("[BETA] {}", title.trim()),
+            "title": format!("[BETA] {}", trunc(title.trim(), 200)),
             "color": color,
             "fields": fields
         }]

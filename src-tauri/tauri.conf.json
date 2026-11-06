@@ -39,7 +39,13 @@
         "skipTaskbar": false
       }
     ],
-    "security": { "csp": null }
+    "security": {
+      "csp": null,
+      "assetProtocol": {
+        "enable": true,
+        "scope": ["$APPDATA/PETABLOCKS Launcher/instances/*/screenshots/*"]
+      }
+    }
   },
   "bundle": {
     "active": true,
