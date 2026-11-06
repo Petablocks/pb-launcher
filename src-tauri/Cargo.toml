@@ -1,6 +1,6 @@
 [package]
 name = "pb-launcher"
-version = "1.8.4"
+version = "1.8.5"
 description = "Official PETABLOCKS Minecraft Launcher"
 edition = "2021"
 

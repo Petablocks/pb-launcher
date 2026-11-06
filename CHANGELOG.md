@@ -3,6 +3,12 @@
 All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.8.5] - 2026-11-06
+### Fixed
+- **Suppressed Java Console Window (`src-tauri/src/launch.rs`, `src-tauri/src/java.rs`)**:
+  - Prefer `javaw.exe` over `java.exe` on Windows when locating the Java 21 runtime.
+  - Applied `CREATE_NO_WINDOW` (0x08000000) process creation flag directly to the spawned Minecraft / NeoForge process, preventing Windows Terminal / Eclipse Adoptium console windows from staying open in the background while playing.
+
 ## [1.8.4] - 2026-11-05
 ### Fixed
 - **Bundled Override Mods Preservation (`src-tauri/src/sync.rs`)**:
