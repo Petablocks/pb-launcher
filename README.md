@@ -33,4 +33,4 @@ npm run tauri build   # build the Windows installer
 
 
 ## Microsoft sign-in
-Uses the Microsoft device code flow (Xbox Live, XSTS, Minecraft services) powered by the official Mojang-approved PETABLOCKS Azure Application (`acbc8721-204e-4445-8c3f-962fa445d718`). The refresh token and cached profile are stored in the Windows Credential Manager; if the network is unavailable the cached account is shown in offline mode.
+Uses the Microsoft device code flow (Xbox Live, XSTS, Minecraft services) powered by the official Mojang-approved PETABLOCKS Azure Application (`acbc8721-204e-4445-8c3f-962fa445d718`). The refresh token and user profile are persisted securely in the Windows Credential Manager (OS Keyring), while the Minecraft Services session token is cached on disk in `session-cache.json` with rate-limit protection (`TOO_MANY_REQUESTS` resilience) and offline fallback mode.
