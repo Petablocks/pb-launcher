@@ -3,6 +3,18 @@
 All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.2] - 2026-11-06
+### Added
+- **2x2 Multi-Instance Modpack Grid**:
+  - Expanded the Play page to display all 4 modpack instances simultaneously in a balanced 2x2 grid:
+    1. **PETABLOCKS Season 2** (`s2.petablocks.com` - Playable now)
+    2. **PETABLOCKS Create 2** (`create2.petablocks.com` - Coming Soon)
+    3. **PETABLOCKS Hunger Games** (`hg.petablocks.com` - Spring 2027)
+    4. **Patreon Supporter Server** (`patreon.petablocks.com` - Supporters Only)
+- **Compact Sidebar Account Pill & Modal**:
+  - Relocated the Account & Closed Beta verification widget from the Play page into a sleek, compact user pill at the bottom of the sidebar.
+  - Clicking the pill opens a dedicated profile modal with full-body skin details, Discord Closed Beta linking tools, and sign-out controls, freeing up the entire main area for modpack cards.
+
 ## [1.9.1] - 2026-11-06
 ### Fixed
 - **Server List Ping SRV Record Resolution**:

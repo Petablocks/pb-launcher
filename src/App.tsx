@@ -25,6 +25,8 @@ import { Session, inTauri } from "./auth";
 import { LauncherUpdateInfo, checkLauncherUpdate, installLauncherUpdate } from "./community";
 import { BuyMeACoffeeLogo } from "./components/BrandIcons";
 import { APP_VERSION } from "./version";
+import SidebarAccountPill from "./components/SidebarAccountPill";
+import { DiscordLinkStatus } from "./community";
 
 type Tab = "play" | "mods" | "packs" | "screenshots" | "news" | "feedback" | "settings";
 
@@ -41,6 +43,7 @@ const NAV: { id: Tab; label: string; icon: typeof Gamepad2; badge?: string }[] =
 export default function App() {
   const [tab, setTab] = useState<Tab>("play");
   const [session, setSession] = useState<Session | null>(null);
+  const [discordStatus, setDiscordStatus] = useState<DiscordLinkStatus | null>(null);
   const [updateInfo, setUpdateInfo] = useState<LauncherUpdateInfo | null>(null);
   const [checkingUpdate, setCheckingUpdate] = useState(false);
   const [installingUpdate, setInstallingUpdate] = useState(false);
@@ -129,6 +132,16 @@ export default function App() {
               );
             })}
           </div>
+          {/* Account Pill at bottom of sidebar */}
+          <div className="mb-3">
+            <SidebarAccountPill
+              session={session}
+              onSession={setSession}
+              discordStatus={discordStatus}
+              onDiscordStatus={setDiscordStatus}
+            />
+          </div>
+
           {/* Optional Community Support (Buy Me a Coffee) */}
           <div className="mb-3 rounded-xl border border-[#FFDD00]/20 bg-[#FFDD00]/5 p-2.5">
             <div className="mb-1.5 flex items-center justify-between px-0.5 text-[10px] font-bold text-pb-muted">
@@ -166,7 +179,12 @@ export default function App() {
         <div className="flex min-w-0 flex-1 flex-col">
           <main className="min-w-0 flex-1 overflow-y-auto p-6">
             {tab === "play" ? (
-              <Home session={session} onSession={setSession} />
+              <Home
+                session={session}
+                onSession={setSession}
+                discordStatus={discordStatus}
+                onDiscordStatus={setDiscordStatus}
+              />
             ) : tab === "mods" ? (
               <Mods />
             ) : tab === "packs" ? (

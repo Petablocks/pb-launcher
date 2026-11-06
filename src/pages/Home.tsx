@@ -46,9 +46,11 @@ import {
 interface Props {
   session: Session | null;
   onSession: (s: Session | null) => void;
+  discordStatus: DiscordLinkStatus | null;
+  onDiscordStatus: (status: DiscordLinkStatus | null) => void;
 }
 
-export default function Home({ session, onSession }: Props) {
+export default function Home({ session, onSession, discordStatus, onDiscordStatus }: Props) {
   const [selectedId, setSelectedId] = useState<string>("petablocks-s2");
   const selectedInstance = INSTANCES.find((i) => i.id === selectedId) ?? INSTANCES[0];
 
@@ -72,8 +74,7 @@ export default function Home({ session, onSession }: Props) {
   const [logs, setLogs] = useState<GameLogLine[]>([]);
   const [showLogs, setShowLogs] = useState(false);
 
-  // Community / Crash / Discord
-  const [discordStatus, setDiscordStatus] = useState<DiscordLinkStatus | null>(null);
+  // Crash
   const [crashReport, setCrashReport] = useState<CrashReportInfo | null>(null);
   const [sendingCrash, setSendingCrash] = useState(false);
   const [crashSent, setCrashSent] = useState(false);
@@ -230,9 +231,9 @@ export default function Home({ session, onSession }: Props) {
 
   return (
     <div className="flex h-full flex-col">
-      {/* Top Main Hero Split Showcase */}
-      <div className="grid min-h-[380px] flex-1 grid-cols-1 gap-4 lg:grid-cols-2">
-        {INSTANCES.slice(0, 2).map((inst) => {
+      {/* 2x2 Multi-Instance Modpack Grid */}
+      <div className="grid min-h-[500px] flex-1 grid-cols-1 gap-4 lg:grid-cols-2">
+        {INSTANCES.map((inst) => {
           const isSelected = inst.id === selectedId;
           const status = serverStatuses[inst.id];
           const isPlayable = inst.status === "playable";
@@ -382,18 +383,6 @@ export default function Home({ session, onSession }: Props) {
           <span>{launchStatus}</span>
         </div>
       )}
-
-      {/* Account Authentication & Quick Sync Bar */}
-      <div className="mt-4">
-        <AccountCard
-          session={session}
-          onSession={onSession}
-          discordStatus={discordStatus}
-          onDiscordStatus={setDiscordStatus}
-          totalPlaytimeSeconds={syncState.totalPlaytimeSeconds}
-          sessionsPlayed={syncState.sessionsPlayed}
-        />
-      </div>
 
       {/* Crash Reporter Bar (if crash occurred) */}
       {crashReport && (
