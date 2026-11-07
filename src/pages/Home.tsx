@@ -24,6 +24,7 @@ import {
   InstanceState,
   LauncherManifest,
   SyncProgress,
+  getChangelog,
   getManifest,
   getSyncState,
   onSyncProgress,
@@ -233,15 +234,10 @@ export default function Home({ session, onSession, discordStatus, onDiscordStatu
         const url =
           selectedInstance.changelogUrl ??
           "https://github.com/Petablocks/pb-launcher/releases/latest/download/CHANGELOG.md";
-        const res = await fetch(url);
-        if (res.ok) {
-          const text = await res.text();
-          setChangelogContent(text);
-        } else {
-          setChangelogContent("Unable to fetch changelog at this time.");
-        }
-      } catch {
-        setChangelogContent("Unable to fetch changelog at this time.");
+        const text = await getChangelog(selectedInstance.id, url);
+        setChangelogContent(text);
+      } catch (err) {
+        setChangelogContent(`Unable to load release notes: ${err}`);
       } finally {
         setLoadingChangelog(false);
       }

@@ -43,6 +43,11 @@ async fn sync_get_manifest(instance_id: String, manifest_url: String) -> Result<
 }
 
 #[tauri::command]
+async fn sync_get_changelog(instance_id: String, changelog_url: String) -> Result<String, String> {
+    sync::fetch_changelog(&instance_id, &changelog_url).await
+}
+
+#[tauri::command]
 fn sync_get_state(instance_id: String) -> InstanceState {
     sync::load_state(&instance_id)
 }
@@ -259,6 +264,7 @@ pub fn run() {
             auth_restore,
             auth_logout,
             sync_get_manifest,
+            sync_get_changelog,
             sync_get_state,
             sync_set_mod_enabled,
             sync_instance,

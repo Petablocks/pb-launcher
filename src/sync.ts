@@ -60,6 +60,11 @@ export const getManifest = (instanceId: string, manifestUrl: string) =>
     ? invoke<LauncherManifest>("sync_get_manifest", { instanceId, manifestUrl })
     : Promise.reject(new Error("Requires Tauri runtime"));
 
+export const getChangelog = (instanceId: string, changelogUrl: string) =>
+  inTauri
+    ? invoke<string>("sync_get_changelog", { instanceId, changelogUrl })
+    : Promise.reject(new Error("Requires Tauri runtime"));
+
 export const getSyncState = (instanceId: string) =>
   inTauri
     ? invoke<InstanceState>("sync_get_state", { instanceId })

@@ -193,6 +193,42 @@ pub async fn fetch_manifest(instance_id: &str, manifest_url: &str) -> Result<Lau
     Err("Unable to fetch modpack manifest from GitHub Releases (and no local cache found).".into())
 }
 
+pub async fn fetch_changelog(instance_id: &str, changelog_url: &str) -> Result<String, String> {
+    let client = http();
+    let candidate_urls = [
+        changelog_url.to_string(),
+        "https://github.com/Petablocks/pb-launcher/releases/latest/download/CHANGELOG.md".to_string(),
+        "https://raw.githubusercontent.com/Petablocks/petablocks-modpack-s2/main/CHANGELOG.md".to_string(),
+    ];
+
+    for url in &candidate_urls {
+        if url.is_empty() {
+            continue;
+        }
+        if let Ok(res) = client.get(url).send().await {
+            if res.status().is_success() {
+                if let Ok(text) = res.text().await {
+                    if !text.trim().is_empty() && !text.contains("404: Not Found") {
+                        let cache_file = instance_dir(instance_id).join("CHANGELOG.md");
+                        let _ = fs::write(cache_file, &text);
+                        return Ok(text);
+                    }
+                }
+            }
+        }
+    }
+
+    // Try reading cached changelog
+    let cache_file = instance_dir(instance_id).join("CHANGELOG.md");
+    if let Ok(text) = fs::read_to_string(cache_file) {
+        if !text.trim().is_empty() {
+            return Ok(text);
+        }
+    }
+
+    Err("No changelog available for this modpack.".into())
+}
+
 fn sha1_file(path: &Path) -> Option<String> {
     let mut f = File::open(path).ok()?;
     let mut hasher = Sha1::new();
