@@ -3,6 +3,12 @@
 All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.6] - 2026-11-07
+### Fixed
+- **Release Notes CORS Fetching**:
+  - Routed modpack changelog fetching through a native Tauri Rust HTTP bridge command (`sync_get_changelog`).
+  - Completely avoids browser WebView cross-origin request restrictions and ensures the in-launcher release notes modal loads instantly.
+
 ## [1.9.5] - 2026-11-07
 ### Added
 - **Modpack Update Notifications & Banner**:
