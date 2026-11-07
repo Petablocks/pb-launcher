@@ -3,6 +3,15 @@
 All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.5] - 2026-11-07
+### Added
+- **Modpack Update Notifications & Banner**:
+  - Added real-time modpack update detection comparing the locally installed manifest version to the latest remote release manifest.
+  - Added an animated glowing `Update v<version>` pill badge to modpack cards when a newer pack release is ready.
+  - Added a dedicated modpack update notification banner directly above the progress bar with version comparison (`v0.21.0` vs installed `v0.20.1`).
+  - Added quick **Changelog** inspection button and modal to review all patch notes and changes before updating.
+  - Added **Update & Play** / **Update** one-click synchronization buttons.
+
 ## [1.9.4] - 2026-11-06
 ### Changed
 - **Hunger Games Card Specifications**:

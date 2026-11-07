@@ -14,6 +14,7 @@ export interface Instance {
   description: string;
   badge?: string;
   playLabel?: string;
+  changelogUrl?: string;
 }
 
 export const INSTANCES: Instance[] = [
@@ -28,6 +29,8 @@ export const INSTANCES: Instance[] = [
     loaderVersion: "21.1.259",
     manifestUrl:
       "https://github.com/Petablocks/pb-launcher/releases/latest/download/launcher-manifest.json",
+    changelogUrl:
+      "https://github.com/Petablocks/pb-launcher/releases/latest/download/CHANGELOG.md",
     status: "playable",
     logoImage: "/cards/logo-season2.png",
     bgImage: "/cards/bg-season2.jpg",
