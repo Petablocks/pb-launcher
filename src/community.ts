@@ -51,25 +51,36 @@ export const getScreenshotsDir = (instanceId: string): Promise<string> =>
 export const getLatestCrashReport = (instanceId: string): Promise<CrashReportInfo | null> =>
   inTauri ? invoke<CrashReportInfo | null>("crash_latest", { instanceId }) : Promise.resolve(null);
 
+export interface FeedbackSubmitResult {
+  ok: boolean;
+  issueNumber: number | null;
+  issueUrl: string | null;
+  repository: string | null;
+  deliveredTo: "github" | "discord";
+}
+
 export const submitCrashWebhook = (args: {
   webhookUrl: string;
   playerName: string;
+  playerUuid?: string;
   instanceId: string;
   summary: string;
   logSnippet: string;
-}): Promise<void> => invoke<void>("crash_submit_webhook", args);
+}): Promise<FeedbackSubmitResult> => invoke<FeedbackSubmitResult>("crash_submit_webhook", args);
 
 export const submitBetaFeedback = (args: {
   webhookUrl: string;
+  target: string;
   category: string;
   title: string;
   description: string;
   playerName: string;
+  playerUuid?: string;
   contact: string;
   launcherVersion: string;
   includeDiagnostics: boolean;
   instanceId: string;
-}): Promise<void> => invoke<void>("feedback_submit", args);
+}): Promise<FeedbackSubmitResult> => invoke<FeedbackSubmitResult>("feedback_submit", args);
 
 export interface LauncherUpdateInfo {
   currentVersion: string;

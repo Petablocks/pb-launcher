@@ -2,25 +2,51 @@ import { useState } from "react";
 import {
   Bug,
   CheckCircle2,
+  ExternalLink,
   Flame,
   Lightbulb,
   Loader2,
   MessageSquareHeart,
+  Monitor,
+  Package,
   ShieldCheck,
 } from "lucide-react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { Session, inTauri } from "../auth";
 import { INSTANCES } from "../instances";
 import { getSettings } from "../launch";
-import { submitBetaFeedback } from "../community";
+import { FeedbackSubmitResult, submitBetaFeedback } from "../community";
 import { APP_VERSION } from "../version";
-import { DiscordLogo, GitHubLogo } from "../components/BrandIcons";
+import { GitHubLogo } from "../components/BrandIcons";
 
 interface Props {
   session: Session | null;
 }
 
 type CategoryId = "bug" | "crash" | "suggestion" | "feedback";
+
+const REPORT_TARGETS: {
+  id: string;
+  label: string;
+  repo: string;
+  desc: string;
+  instanceId: string;
+}[] = [
+  {
+    id: "launcher",
+    label: "PETABLOCKS Launcher",
+    repo: "Petablocks/pb-launcher",
+    desc: "Launcher UI, updates, login, Java runtime, or settings",
+    instanceId: "petablocks-s2",
+  },
+  {
+    id: "petablocks-s2",
+    label: "PETABLOCKS Season 2 Modpack",
+    repo: "Petablocks/petablocks-modpack-s2",
+    desc: "In-game mods, recipes, shaders, keybinds, or Season 2 crashes",
+    instanceId: "petablocks-s2",
+  },
+];
 
 const CATEGORIES: {
   id: CategoryId;
@@ -51,7 +77,7 @@ const CATEGORIES: {
   {
     id: "suggestion",
     label: "Feature Idea",
-    desc: "Suggest an improvement or feature for the launcher",
+    desc: "Suggest an improvement or mod addition",
     icon: Lightbulb,
     placeholderTitle: "e.g., Add shaderpack selector tab",
     placeholderDesc: "Describe the feature or quality-of-life improvement you'd love to see...",
@@ -59,49 +85,53 @@ const CATEGORIES: {
   {
     id: "feedback",
     label: "Beta Impression",
-    desc: "Share general thoughts on performance, UI, or onboarding",
+    desc: "Share general thoughts on performance, UI, or gameplay",
     icon: MessageSquareHeart,
     placeholderTitle: "e.g., Smooth install & update experience on Windows 11",
-    placeholderDesc: "How is the PETABLOCKS Launcher Beta feeling on your PC so far?",
+    placeholderDesc: "How is the PETABLOCKS Launcher & Season 2 Modpack feeling on your PC so far?",
   },
 ];
 
 export default function Feedback({ session }: Props) {
-  const instance = INSTANCES[0];
+  const [target, setTarget] = useState<string>("launcher");
   const [category, setCategory] = useState<CategoryId>("bug");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [contact, setContact] = useState("");
   const [includeDiagnostics, setIncludeDiagnostics] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  const [submitted, setSubmitted] = useState(false);
+  const [submitResult, setSubmitResult] = useState<FeedbackSubmitResult | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const activeTarget = REPORT_TARGETS.find((t) => t.id === target) ?? REPORT_TARGETS[0];
   const activeCat = CATEGORIES.find((c) => c.id === category) ?? CATEGORIES[0];
+  const instance = INSTANCES.find((i) => i.id === activeTarget.instanceId) ?? INSTANCES[0];
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!title.trim() || !description.trim()) {
-      setError("Please provide both a short summary title and details.");
+    if (title.trim().length < 5 || description.trim().length < 15) {
+      setError("Please provide a descriptive summary title (at least 5 characters) and details (at least 15 characters).");
       return;
     }
     setSubmitting(true);
     setError(null);
-    setSubmitted(false);
+    setSubmitResult(null);
     try {
       const s = inTauri ? await getSettings() : { crashWebhookUrl: "" };
-      await submitBetaFeedback({
+      const res = await submitBetaFeedback({
         webhookUrl: s.crashWebhookUrl || "",
+        target: activeTarget.id,
         category,
         title: title.trim(),
         description: description.trim(),
         playerName: session?.profile.name ?? "Beta Tester (Not signed in)",
+        playerUuid: session?.profile.uuid ?? "",
         contact: contact.trim(),
         launcherVersion: APP_VERSION,
         includeDiagnostics,
         instanceId: instance.id,
       });
-      setSubmitted(true);
+      setSubmitResult(res);
       setTitle("");
       setDescription("");
     } catch (err) {
@@ -111,19 +141,23 @@ export default function Feedback({ session }: Props) {
     }
   }
 
-  function handleOpenGitHubIssue() {
-    const issueTitle = encodeURIComponent(`[Beta v${APP_VERSION}] ${title || activeCat.label}`);
-    const issueBody = encodeURIComponent(
-      `**Category:** ${activeCat.label}\n**Launcher Version:** v${APP_VERSION}\n**Minecraft User:** ${
-        session?.profile.name ?? "Not signed in"
-      }\n\n### Description\n${description || "_Describe the issue or feedback here..._"}`
-    );
-    const url = `https://github.com/Petablocks/pb-launcher/issues/new?title=${issueTitle}&body=${issueBody}`;
+  function handleOpenUrl(url: string) {
     if (inTauri) {
       openUrl(url);
     } else {
       window.open(url, "_blank");
     }
+  }
+
+  function handleOpenGitHubIssue() {
+    const issueTitle = encodeURIComponent(`[Beta v${APP_VERSION}] ${title || activeCat.label}`);
+    const issueBody = encodeURIComponent(
+      `**Target:** ${activeTarget.label}\n**Category:** ${activeCat.label}\n**Launcher Version:** v${APP_VERSION}\n**Minecraft User:** ${
+        session?.profile.name ?? "Not signed in"
+      }\n\n### Description\n${description || "_Describe the issue or feedback here..._"}`
+    );
+    const url = `https://github.com/${activeTarget.repo}/issues/new?title=${issueTitle}&body=${issueBody}`;
+    handleOpenUrl(url);
   }
 
   return (
@@ -135,7 +169,8 @@ export default function Feedback({ session }: Props) {
           </div>
           <h1 className="mt-2 text-2xl font-extrabold">Beta Feedback & Bug Reports</h1>
           <p className="mt-1 text-xs text-pb-muted">
-            Help us polish the PETABLOCKS Launcher during Beta! Reports go directly to the PETABLOCKS engineering channel on Discord.
+            Reports automatically open a tracked GitHub Issue in{" "}
+            <span className="font-mono font-bold text-white/90">{activeTarget.repo}</span> and notify the PETABLOCKS engineering team.
           </p>
         </div>
 
@@ -144,35 +179,85 @@ export default function Feedback({ session }: Props) {
           onClick={handleOpenGitHubIssue}
           className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-white/10 bg-pb-card px-4 py-2.5 text-xs font-bold text-pb-muted transition hover:border-white/20 hover:text-white"
         >
-          <GitHubLogo size={15} /> Open GitHub Issue
+          <GitHubLogo size={15} /> Open in Browser
         </button>
       </div>
 
+      {/* Target Repository Selector */}
+      <div className="mt-5">
+        <div className="mb-2 text-[11px] font-extrabold uppercase tracking-wider text-pb-muted">
+          1. What are you reporting on?
+        </div>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          {REPORT_TARGETS.map((t) => {
+            const active = target === t.id;
+            const Icon = t.id === "launcher" ? Monitor : Package;
+            return (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => {
+                  setTarget(t.id);
+                  setSubmitResult(null);
+                }}
+                className={`flex cursor-pointer items-start gap-3.5 rounded-xl border p-3.5 text-left transition ${
+                  active
+                    ? "border-pb-cyan bg-pb-cyan/15 text-white shadow-[0_0_20px_rgba(15,205,248,0.12)]"
+                    : "border-white/10 bg-pb-card text-pb-muted hover:border-white/20 hover:text-white"
+                }`}
+              >
+                <div
+                  className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${
+                    active ? "bg-pb-cyan/20 text-pb-cyan" : "bg-white/5 text-pb-muted"
+                  }`}
+                >
+                  <Icon size={18} />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-extrabold">{t.label}</span>
+                    <span className="rounded bg-black/40 px-1.5 py-0.5 font-mono text-[10px] text-pb-cyan">
+                      {t.repo.split("/")[1]}
+                    </span>
+                  </div>
+                  <p className="mt-0.5 text-[11px] leading-snug opacity-80">{t.desc}</p>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
       {/* Category Selector */}
-      <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        {CATEGORIES.map((c) => {
-          const Icon = c.icon;
-          const active = category === c.id;
-          return (
-            <button
-              key={c.id}
-              type="button"
-              onClick={() => {
-                setCategory(c.id);
-                setSubmitted(false);
-              }}
-              className={`flex cursor-pointer flex-col items-start rounded-xl border p-3.5 text-left transition ${
-                active
-                  ? "border-pb-cyan bg-pb-cyan/15 text-white"
-                  : "border-white/10 bg-pb-card text-pb-muted hover:border-white/20 hover:text-white"
-              }`}
-            >
-              <Icon size={18} className={active ? "text-pb-cyan" : "text-pb-muted"} />
-              <span className="mt-2 text-xs font-extrabold">{c.label}</span>
-              <span className="mt-0.5 text-[11px] leading-tight opacity-75">{c.desc}</span>
-            </button>
-          );
-        })}
+      <div className="mt-4">
+        <div className="mb-2 text-[11px] font-extrabold uppercase tracking-wider text-pb-muted">
+          2. Report Category
+        </div>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {CATEGORIES.map((c) => {
+            const Icon = c.icon;
+            const active = category === c.id;
+            return (
+              <button
+                key={c.id}
+                type="button"
+                onClick={() => {
+                  setCategory(c.id);
+                  setSubmitResult(null);
+                }}
+                className={`flex cursor-pointer flex-col items-start rounded-xl border p-3.5 text-left transition ${
+                  active
+                    ? "border-pb-cyan bg-pb-cyan/15 text-white"
+                    : "border-white/10 bg-pb-card text-pb-muted hover:border-white/20 hover:text-white"
+                }`}
+              >
+                <Icon size={18} className={active ? "text-pb-cyan" : "text-pb-muted"} />
+                <span className="mt-2 text-xs font-extrabold">{c.label}</span>
+                <span className="mt-0.5 text-[11px] leading-tight opacity-75">{c.desc}</span>
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {/* Feedback Form */}
@@ -266,16 +351,34 @@ export default function Feedback({ session }: Props) {
           </div>
         )}
 
-        {submitted && (
-          <div className="flex items-center gap-2 rounded-xl border border-pb-mint/40 bg-pb-mint/15 px-4 py-3 text-xs font-bold text-pb-mint">
-            <CheckCircle2 size={16} />
-            <span>
-              Thank you! Your report has been delivered to the PETABLOCKS team on Discord.
-            </span>
+        {submitResult && (
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-pb-mint/40 bg-pb-mint/15 px-4 py-3 text-xs font-bold text-pb-mint">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 size={16} className="shrink-0" />
+              <span>
+                {submitResult.issueNumber && submitResult.repository
+                  ? `Issue #${submitResult.issueNumber} created in ${submitResult.repository}!`
+                  : "Thank you! Your report has been delivered to the PETABLOCKS team."}
+              </span>
+            </div>
+            {submitResult.issueUrl && (
+              <button
+                type="button"
+                onClick={() => handleOpenUrl(submitResult.issueUrl!)}
+                className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-pb-mint/40 bg-black/30 px-3 py-1.5 text-[11px] font-extrabold text-white transition hover:bg-black/50"
+              >
+                <GitHubLogo size={13} />
+                <span>View Issue #{submitResult.issueNumber}</span>
+                <ExternalLink size={12} />
+              </button>
+            )}
           </div>
         )}
 
-        <div className="flex items-center justify-end pt-1">
+        <div className="flex items-center justify-between pt-1">
+          <span className="text-[11px] text-pb-muted">
+            Target repo: <span className="font-mono text-white/80">{activeTarget.repo}</span>
+          </span>
           <button
             type="submit"
             disabled={submitting || !inTauri}
@@ -283,11 +386,11 @@ export default function Feedback({ session }: Props) {
           >
             {submitting ? (
               <>
-                <Loader2 size={15} className="animate-spin" /> Sending Report...
+                <Loader2 size={15} className="animate-spin" /> Creating GitHub Issue...
               </>
             ) : (
               <>
-                <DiscordLogo size={15} /> Send Report to PETABLOCKS Team
+                <GitHubLogo size={15} /> Submit Report to GitHub
               </>
             )}
           </button>

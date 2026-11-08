@@ -2553,7 +2553,7 @@ dependencies = [
 
 [[package]]
 name = "pb-launcher"
-version = "1.9.6"
+version = "1.10.0"
 dependencies = [
  "dirs 5.0.1",
  "hex",

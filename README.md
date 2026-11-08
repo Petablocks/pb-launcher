@@ -1,11 +1,11 @@
 # PETABLOCKS Launcher
 
-**Version**: `v1.9.6` - Official Minecraft launcher for the [PETABLOCKS](https://petablocks.com) network.
+**Version**: `v1.10.0` - Official Minecraft launcher for the [PETABLOCKS](https://petablocks.com) network.
 
 Built with Tauri v2 (Rust) + React 19 + TypeScript + Tailwind CSS v4, using the official `petablocks-brand` design tokens.
 
 ## Status
-All phases complete: frameless transparent startup splash screen with automatic update installation, Microsoft sign-in with full-body 3D skin preview and playtime tracking, **Discord Account Linking & Closed Beta Role Gate (`my.petablocks.com` integration)**, GitHub Releases manifest sync engine, Shaders & Resource Packs manager (`config/iris.properties` integration), Adoptium Java 21 auto-installer, NeoForge 21.1.259 launch engine with auto-hide/restore while playing, native TCP Server List Ping, Discord Rich Presence, Screenshots gallery, News & optional Buy Me a Coffee hosting support link, Crash Report diagnostics, and in-app Beta Feedback & Bug Reporting.
+All phases complete: frameless transparent startup splash screen with automatic update installation, Microsoft sign-in with full-body 3D skin preview and playtime tracking, **Discord Account Linking & Closed Beta Role Gate (`my.petablocks.com` integration)**, GitHub Releases manifest sync engine, Shaders & Resource Packs manager (`config/iris.properties` integration), Adoptium Java 21 auto-installer, NeoForge 21.1.259 launch engine with auto-hide/restore while playing, native TCP Server List Ping, Discord Rich Presence, Screenshots gallery, News & optional Buy Me a Coffee hosting support link, Crash Report diagnostics, and **direct in-launcher GitHub Issue & Crash Report Gateway (`Petablocks/pb-launcher` & `Petablocks/petablocks-modpack-s2` routing)**.
 
 ## Season 2 instance
 | Property | Value |

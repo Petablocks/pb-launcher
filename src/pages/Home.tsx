@@ -214,6 +214,7 @@ export default function Home({ session, onSession, discordStatus, onDiscordStatu
       await submitCrashWebhook({
         webhookUrl: s.crashWebhookUrl || "",
         playerName: session?.profile.name ?? "Unknown",
+        playerUuid: session?.profile.uuid ?? "",
         instanceId: selectedInstance.id,
         summary: crashReport.summary,
         logSnippet: crashReport.content,

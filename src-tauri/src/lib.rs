@@ -8,7 +8,10 @@ mod sync;
 mod updater;
 
 use auth::{DeviceCodeInfo, Session};
-use community::{CrashReportInfo, DiscordLinkStatus, LauncherLinkCodeResponse, ScreenshotItem};
+use community::{
+    CrashReportInfo, DiscordLinkStatus, FeedbackSubmitResult, LauncherLinkCodeResponse,
+    ScreenshotItem,
+};
 use java::JavaStatus;
 use launch::LaunchRequest;
 use ping::ServerStatus;
@@ -163,31 +166,44 @@ fn crash_latest(instance_id: String) -> Option<CrashReportInfo> {
 async fn crash_submit_webhook(
     webhook_url: String,
     player_name: String,
+    player_uuid: Option<String>,
     instance_id: String,
     summary: String,
     log_snippet: String,
-) -> Result<(), String> {
-    community::submit_crash_webhook(&webhook_url, &player_name, &instance_id, &summary, &log_snippet).await
+) -> Result<FeedbackSubmitResult, String> {
+    community::submit_crash_webhook(
+        &webhook_url,
+        &player_name,
+        player_uuid.as_deref().unwrap_or(""),
+        &instance_id,
+        &summary,
+        &log_snippet,
+    )
+    .await
 }
 
 #[tauri::command]
 async fn feedback_submit(
     webhook_url: String,
+    target: Option<String>,
     category: String,
     title: String,
     description: String,
     player_name: String,
+    player_uuid: Option<String>,
     contact: String,
     launcher_version: String,
     include_diagnostics: bool,
     instance_id: String,
-) -> Result<(), String> {
+) -> Result<FeedbackSubmitResult, String> {
     community::submit_beta_feedback(
         &webhook_url,
+        target.as_deref().unwrap_or("launcher"),
         &category,
         &title,
         &description,
         &player_name,
+        player_uuid.as_deref().unwrap_or(""),
         &contact,
         &launcher_version,
         include_diagnostics,

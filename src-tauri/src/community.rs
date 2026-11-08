@@ -189,15 +189,85 @@ pub fn latest_crash_report(instance_id: &str) -> Option<CrashReportInfo> {
     })
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FeedbackSubmitResult {
+    pub ok: bool,
+    pub issue_number: Option<u64>,
+    pub issue_url: Option<String>,
+    pub repository: Option<String>,
+    pub delivered_to: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct GatewayReportResponse {
+    ok: Option<bool>,
+    issue_number: Option<u64>,
+    issue_url: Option<String>,
+    repository: Option<String>,
+    error: Option<String>,
+}
+
 pub async fn submit_crash_webhook(
     webhook_url: &str,
     player_name: &str,
+    player_uuid: &str,
     instance_id: &str,
     summary: &str,
     log_snippet: &str,
-) -> Result<(), String> {
+) -> Result<FeedbackSubmitResult, String> {
+    let settings = crate::settings::load_settings();
+    let java = crate::java::detect_java();
+    let state = crate::sync::load_state(instance_id);
+    let truncated = trunc(log_snippet, 4000);
+
+    let gateway_payload = json!({
+        "target": instance_id,
+        "category": "crash",
+        "title": format!("Minecraft Crash: {}", trunc(summary, 90)),
+        "description": format!("**Crash Summary:** {}\n\n### Crash Report Excerpt\n```text\n{}\n```", trunc(summary, 500), truncated),
+        "playerName": player_name,
+        "playerUuid": player_uuid,
+        "launcherVersion": env!("CARGO_PKG_VERSION"),
+        "diagnostics": {
+            "os": std::env::consts::OS,
+            "arch": std::env::consts::ARCH,
+            "memoryMb": settings.memory_mb,
+            "javaVersion": java.version.clone().unwrap_or_else(|| "Not installed".into()),
+            "javaSource": java.source.clone(),
+            "modpackVersion": state.installed_version.clone().unwrap_or_else(|| "Not synced".into()),
+            "disabledMods": state.disabled_mods.len()
+        }
+    });
+
+    let client = Client::builder()
+        .timeout(Duration::from_secs(15))
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let gateway_url = format!("{PB_AUTH_BASE_URL}/api/public/launcher/report");
+    if let Ok(res) = client.post(&gateway_url).json(&gateway_payload).send().await {
+        let status = res.status();
+        if let Ok(body) = res.json::<GatewayReportResponse>().await {
+            if status.is_success() && body.ok.unwrap_or(false) {
+                return Ok(FeedbackSubmitResult {
+                    ok: true,
+                    issue_number: body.issue_number,
+                    issue_url: body.issue_url,
+                    repository: body.repository,
+                    delivered_to: "github".to_string(),
+                });
+            }
+            if status.as_u16() == 429 || status.as_u16() == 400 {
+                return Err(body.error.unwrap_or_else(|| format!("Report rejected ({status})")));
+            }
+        }
+    }
+
+    // Fallback to direct Discord webhook if configured
     let target_url = resolve_webhook(webhook_url)?;
-    let truncated = trunc(log_snippet, 950);
+    let discord_truncated = trunc(log_snippet, 950);
     let payload = json!({
         "username": "PETABLOCKS Launcher Crash Reporter",
         "embeds": [{
@@ -206,15 +276,11 @@ pub async fn submit_crash_webhook(
             "fields": [
                 { "name": "Player", "value": trunc(player_name, 100), "inline": true },
                 { "name": "Summary", "value": trunc(summary, 1000), "inline": false },
-                { "name": "Log Excerpt", "value": format!("```\n{truncated}\n```"), "inline": false }
+                { "name": "Log Excerpt", "value": format!("```\n{discord_truncated}\n```"), "inline": false }
             ]
         }]
     });
 
-    let client = Client::builder()
-        .timeout(Duration::from_secs(15))
-        .build()
-        .map_err(|e| e.to_string())?;
     let res = client
         .post(target_url)
         .json(&payload)
@@ -222,23 +288,96 @@ pub async fn submit_crash_webhook(
         .await
         .map_err(|e| e.to_string())?;
     if !res.status().is_success() {
-        return Err(format!("Discord webhook returned HTTP {}", res.status()));
+        return Err(format!("Report server returned HTTP {}", res.status()));
     }
-    Ok(())
+    Ok(FeedbackSubmitResult {
+        ok: true,
+        issue_number: None,
+        issue_url: None,
+        repository: None,
+        delivered_to: "discord".to_string(),
+    })
 }
 
 pub async fn submit_beta_feedback(
     webhook_url: &str,
+    target: &str,
     category: &str,
     title: &str,
     description: &str,
     player_name: &str,
+    player_uuid: &str,
     contact: &str,
     launcher_version: &str,
     include_diagnostics: bool,
     instance_id: &str,
-) -> Result<(), String> {
-    let target_url = resolve_webhook(webhook_url)?;
+) -> Result<FeedbackSubmitResult, String> {
+    let settings = crate::settings::load_settings();
+    let java = crate::java::detect_java();
+    let state = crate::sync::load_state(instance_id);
+
+    let diagnostics_json = if include_diagnostics {
+        json!({
+            "os": std::env::consts::OS,
+            "arch": std::env::consts::ARCH,
+            "memoryMb": settings.memory_mb,
+            "javaVersion": java.version.clone().unwrap_or_else(|| "Not installed".into()),
+            "javaSource": java.source.clone(),
+            "modpackVersion": state.installed_version.clone().unwrap_or_else(|| "Not synced".into()),
+            "disabledMods": state.disabled_mods.len()
+        })
+    } else {
+        serde_json::Value::Null
+    };
+
+    let gateway_payload = json!({
+        "target": if target.trim().is_empty() { "launcher" } else { target.trim() },
+        "category": category,
+        "title": title.trim(),
+        "description": description.trim(),
+        "playerName": player_name,
+        "playerUuid": player_uuid,
+        "contact": contact.trim(),
+        "launcherVersion": launcher_version,
+        "diagnostics": diagnostics_json,
+    });
+
+    let client = Client::builder()
+        .timeout(Duration::from_secs(15))
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let gateway_url = format!("{PB_AUTH_BASE_URL}/api/public/launcher/report");
+    let mut gateway_err: Option<String> = None;
+
+    if let Ok(res) = client.post(&gateway_url).json(&gateway_payload).send().await {
+        let status = res.status();
+        if let Ok(body) = res.json::<GatewayReportResponse>().await {
+            if status.is_success() && body.ok.unwrap_or(false) {
+                return Ok(FeedbackSubmitResult {
+                    ok: true,
+                    issue_number: body.issue_number,
+                    issue_url: body.issue_url,
+                    repository: body.repository,
+                    delivered_to: "github".to_string(),
+                });
+            }
+            if status.as_u16() == 429 || status.as_u16() == 400 {
+                return Err(body.error.unwrap_or_else(|| format!("Report rejected ({status})")));
+            }
+            gateway_err = body.error;
+        }
+    }
+
+    // Fallback to direct Discord webhook if configured
+    let target_url = match resolve_webhook(webhook_url) {
+        Ok(u) => u,
+        Err(_) => {
+            return Err(gateway_err.unwrap_or_else(|| {
+                "GitHub Issue Gateway is awaiting token configuration in my.petablocks.com/settings.".to_string()
+            }));
+        }
+    };
 
     let color = match category {
         "bug" => 0xEF4444,
@@ -247,6 +386,7 @@ pub async fn submit_beta_feedback(
     };
 
     let mut fields = vec![
+        json!({ "name": "Target", "value": target, "inline": true }),
         json!({ "name": "Category", "value": category.to_uppercase(), "inline": true }),
         json!({ "name": "Player", "value": if player_name.is_empty() { "Not signed in".to_string() } else { trunc(player_name, 100) }, "inline": true }),
         json!({ "name": "Launcher", "value": format!("v{launcher_version} ({}/{})", std::env::consts::OS, std::env::consts::ARCH), "inline": true }),
@@ -263,9 +403,6 @@ pub async fn submit_beta_feedback(
     }));
 
     if include_diagnostics {
-        let settings = crate::settings::load_settings();
-        let java = crate::java::detect_java();
-        let state = crate::sync::load_state(instance_id);
         let diag = format!(
             "RAM: {} MB | Java: {} ({}) | Modpack: {} | Disabled Mods: {}",
             settings.memory_mb,
@@ -290,10 +427,6 @@ pub async fn submit_beta_feedback(
         }]
     });
 
-    let client = Client::builder()
-        .timeout(Duration::from_secs(15))
-        .build()
-        .map_err(|e| e.to_string())?;
     let res = client
         .post(target_url)
         .json(&payload)
@@ -303,7 +436,13 @@ pub async fn submit_beta_feedback(
     if !res.status().is_success() {
         return Err(format!("Discord webhook returned HTTP {}", res.status()));
     }
-    Ok(())
+    Ok(FeedbackSubmitResult {
+        ok: true,
+        issue_number: None,
+        issue_url: None,
+        repository: None,
+        delivered_to: "discord".to_string(),
+    })
 }
 
 /// Lightweight Windows Discord IPC Rich Presence updater (`\\.\pipe\discord-ipc-0`).

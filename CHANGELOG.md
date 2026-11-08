@@ -3,6 +3,13 @@
 All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.10.0] - 2026-11-08
+### Added
+- **Direct GitHub Issue & Crash Report Gateway Integration (`src/pages/Feedback.tsx`, `src-tauri/src/community.rs`)**:
+  - Linked in-launcher Bug Reports, Crash Reports, and Feature Ideas directly to GitHub Issues via the PETABLOCKS Cloudflare Gateway (`POST https://my.petablocks.com/api/public/launcher/report`).
+  - Added a **Report Target** selector in the Beta Feedback tab so players can choose between **PETABLOCKS Launcher** (`Petablocks/pb-launcher`) and **PETABLOCKS Season 2 Modpack** (`Petablocks/petablocks-modpack-s2`), automatically routing modpack bugs and crashes to their respective repository.
+  - Displays the created GitHub Issue number (`Issue #XX`) and a one-click **View Issue** button right inside the launcher after submission.
+
 ## [1.9.6] - 2026-11-07
 ### Fixed
 - **Release Notes CORS Fetching**:
