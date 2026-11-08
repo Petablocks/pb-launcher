@@ -83,10 +83,12 @@ export default function App() {
   }
 
   useEffect(() => {
+    let disposed = false;
+    let unlisten: (() => void) | null = null;
     runUpdateCheck();
     refreshAllPlaytime();
-    let unlisten: (() => void) | null = null;
     onPlaytimeUpdated((instId, st) => {
+      if (disposed) return;
       setPlaytimeByInstance((prev) => ({
         ...prev,
         [instId]: {
@@ -95,10 +97,12 @@ export default function App() {
         },
       }));
     }).then((u) => {
-      unlisten = u;
+      if (disposed) u();
+      else unlisten = u;
     });
     const timer = setInterval(runUpdateCheck, 120000);
     return () => {
+      disposed = true;
       clearInterval(timer);
       unlisten?.();
     };

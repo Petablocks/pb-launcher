@@ -333,7 +333,7 @@ export default function Feedback({ session }: Props) {
                 Include Automatic Launcher Diagnostics
               </div>
               <div className="text-[11px] text-pb-muted">
-                Attaches Launcher v{APP_VERSION}, OS arch, RAM allocation, Java 21 status, and synced modpack version (no personal tokens).
+                Attaches your Minecraft username &amp; UUID, Launcher v{APP_VERSION}, OS arch, RAM allocation, Java 21 status, and synced modpack version (Windows user paths are automatically scrubbed; no tokens are sent).
               </div>
             </div>
           </div>

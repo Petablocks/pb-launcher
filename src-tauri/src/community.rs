@@ -1,31 +1,80 @@
-use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::fs::{self, OpenOptions};
-use std::io::{Read, Write};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::io::Write;
+use std::sync::mpsc::{self, SyncSender};
+use std::sync::LazyLock;
+use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::sync::instance_dir;
+use crate::sync::{http_client, instance_dir};
 
 const DISCORD_APP_ID: &str = "1302689041827651624";
 const PB_AUTH_BASE_URL: &str = "https://my.petablocks.com";
-/// Default report webhook, injected at build time (`PB_DEFAULT_WEBHOOK`, a CI secret); never committed.
-const DEFAULT_BETA_WEBHOOK: Option<&str> = option_env!("PB_DEFAULT_WEBHOOK");
 
 /// Discord rejects embed field values over 1024 chars; stay under it.
 fn trunc(s: &str, max: usize) -> String {
     s.chars().take(max).collect()
 }
 
+/// Validates an optional user-supplied Discord webhook URL.
+/// No default webhook secret is ever compiled into the binary; all primary reports go through
+/// `my.petablocks.com/api/public/launcher/report`, and optional user webhooks are restricted strictly
+/// to `https://discord.com/api/webhooks/` or `https://discordapp.com/api/webhooks/`.
 fn resolve_webhook(user_url: &str) -> Result<String, String> {
     let u = user_url.trim();
-    if !u.is_empty() {
-        return Ok(u.to_string());
+    if u.is_empty() {
+        return Err("No Discord webhook URL is configured.".to_string());
     }
-    DEFAULT_BETA_WEBHOOK
-        .filter(|s| !s.is_empty())
-        .map(String::from)
-        .ok_or_else(|| "No report webhook is configured. Add one in Settings.".to_string())
+    let valid_prefix = u.starts_with("https://discord.com/api/webhooks/")
+        || u.starts_with("https://discordapp.com/api/webhooks/");
+    if !valid_prefix {
+        return Err(
+            "Invalid webhook URL: only https://discord.com/api/webhooks/... URLs are permitted."
+                .to_string(),
+        );
+    }
+    Ok(u.to_string())
+}
+
+/// Scrubs Windows user profile paths (`C:\Users\<username>` and forward-slash equivalents)
+/// from crash logs and error descriptions before displaying or transmitting them.
+pub fn scrub_pii(input: &str) -> String {
+    let mut out = input.to_string();
+    for env_key in ["USERPROFILE", "APPDATA", "LOCALAPPDATA"] {
+        if let Ok(val) = std::env::var(env_key) {
+            let trimmed = val.trim();
+            if !trimmed.is_empty() {
+                out = out.replace(trimmed, &format!("<{env_key}>"));
+                let slash = trimmed.replace('\\', "/");
+                out = out.replace(&slash, &format!("<{env_key}>"));
+            }
+        }
+    }
+    // Generic C:\Users\<name>\ and C:/Users/<name>/ scrubber
+    out = scrub_users_segment(&out, ":\\Users\\", '\\');
+    out = scrub_users_segment(&out, ":/Users/", '/');
+    out
+}
+
+fn scrub_users_segment(s: &str, needle: &str, sep: char) -> String {
+    let mut result = String::with_capacity(s.len());
+    let mut rest = s;
+    while let Some(idx) = rest.to_ascii_lowercase().find(&needle.to_ascii_lowercase()) {
+        // Include everything up to the drive letter before `:\Users\`
+        let prefix_end = idx.saturating_sub(1);
+        result.push_str(&rest[..prefix_end]);
+        let after_users = &rest[idx + needle.len()..];
+        if let Some(next_sep) = after_users.find(sep) {
+            result.push_str("<USERPROFILE>");
+            rest = &after_users[next_sep..];
+        } else {
+            result.push_str("<USERPROFILE>");
+            rest = "";
+            break;
+        }
+    }
+    result.push_str(rest);
+    result
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -50,12 +99,15 @@ pub struct LauncherLinkCodeResponse {
 }
 
 pub async fn check_discord_link(uuid: &str) -> Result<DiscordLinkStatus, String> {
-    let client = Client::builder()
-        .timeout(Duration::from_secs(12))
-        .build()
-        .map_err(|e| e.to_string())?;
-    let url = format!("{PB_AUTH_BASE_URL}/api/public/launcher/status/{uuid}");
-    let res = client
+    let clean_uuid: String = uuid
+        .chars()
+        .filter(|c| c.is_ascii_hexdigit() || *c == '-')
+        .collect();
+    if clean_uuid.is_empty() {
+        return Err("Invalid player UUID.".into());
+    }
+    let url = format!("{PB_AUTH_BASE_URL}/api/public/launcher/status/{clean_uuid}");
+    let res = http_client()
         .get(&url)
         .send()
         .await
@@ -63,19 +115,17 @@ pub async fn check_discord_link(uuid: &str) -> Result<DiscordLinkStatus, String>
     if !res.status().is_success() {
         return Err(format!("Identity server returned HTTP {}", res.status()));
     }
-    res.json::<DiscordLinkStatus>().await.map_err(|e| e.to_string())
+    res.json::<DiscordLinkStatus>()
+        .await
+        .map_err(|e| e.to_string())
 }
 
 pub async fn request_discord_link_code(
     uuid: &str,
     username: &str,
 ) -> Result<LauncherLinkCodeResponse, String> {
-    let client = Client::builder()
-        .timeout(Duration::from_secs(12))
-        .build()
-        .map_err(|e| e.to_string())?;
     let url = format!("{PB_AUTH_BASE_URL}/api/public/launcher/link-code");
-    let res = client
+    let res = http_client()
         .post(&url)
         .json(&json!({ "uuid": uuid, "username": username }))
         .send()
@@ -173,7 +223,8 @@ pub fn latest_crash_report(instance_id: &str) -> Option<CrashReportInfo> {
     }
 
     let (_, path, filename) = latest?;
-    let content = fs::read_to_string(&path).ok()?;
+    let raw_content = fs::read_to_string(&path).ok()?;
+    let content = scrub_pii(&raw_content);
     let summary = content
         .lines()
         .find(|l| l.starts_with("Description:") || l.contains("Exception") || l.contains("Error"))
@@ -217,16 +268,26 @@ pub async fn submit_crash_webhook(
     summary: &str,
     log_snippet: &str,
 ) -> Result<FeedbackSubmitResult, String> {
-    let settings = crate::settings::load_settings();
-    let java = crate::java::detect_java();
-    let state = crate::sync::load_state(instance_id);
-    let truncated = trunc(log_snippet, 4000);
+    let inst_owned = instance_id.to_string();
+    let (settings, java, state) = tokio::task::spawn_blocking(move || {
+        (
+            crate::settings::load_settings(),
+            crate::java::detect_java(),
+            crate::sync::load_state(&inst_owned),
+        )
+    })
+    .await
+    .map_err(|e| e.to_string())?;
+
+    let scrubbed_summary = scrub_pii(summary);
+    let scrubbed_log = scrub_pii(log_snippet);
+    let truncated = trunc(&scrubbed_log, 4000);
 
     let gateway_payload = json!({
         "target": instance_id,
         "category": "crash",
-        "title": format!("Minecraft Crash: {}", trunc(summary, 90)),
-        "description": format!("**Crash Summary:** {}\n\n### Crash Report Excerpt\n```text\n{}\n```", trunc(summary, 500), truncated),
+        "title": format!("Minecraft Crash: {}", trunc(&scrubbed_summary, 90)),
+        "description": format!("**Crash Summary:** {}\n\n### Crash Report Excerpt\n```text\n{}\n```", trunc(&scrubbed_summary, 500), truncated),
         "playerName": player_name,
         "playerUuid": player_uuid,
         "launcherVersion": env!("CARGO_PKG_VERSION"),
@@ -241,11 +302,7 @@ pub async fn submit_crash_webhook(
         }
     });
 
-    let client = Client::builder()
-        .timeout(Duration::from_secs(15))
-        .build()
-        .map_err(|e| e.to_string())?;
-
+    let client = http_client();
     let gateway_url = format!("{PB_AUTH_BASE_URL}/api/public/launcher/report");
     if let Ok(res) = client.post(&gateway_url).json(&gateway_payload).send().await {
         let status = res.status();
@@ -260,14 +317,16 @@ pub async fn submit_crash_webhook(
                 });
             }
             if status.as_u16() == 429 || status.as_u16() == 400 {
-                return Err(body.error.unwrap_or_else(|| format!("Report rejected ({status})")));
+                return Err(body
+                    .error
+                    .unwrap_or_else(|| format!("Report rejected ({status})")));
             }
         }
     }
 
-    // Fallback to direct Discord webhook if configured
+    // Fallback to optional user-configured Discord webhook if valid
     let target_url = resolve_webhook(webhook_url)?;
-    let discord_truncated = trunc(log_snippet, 950);
+    let discord_truncated = trunc(&scrubbed_log, 950);
     let payload = json!({
         "username": "PETABLOCKS Launcher Crash Reporter",
         "embeds": [{
@@ -275,7 +334,7 @@ pub async fn submit_crash_webhook(
             "color": 0x0FCDF8,
             "fields": [
                 { "name": "Player", "value": trunc(player_name, 100), "inline": true },
-                { "name": "Summary", "value": trunc(summary, 1000), "inline": false },
+                { "name": "Summary", "value": trunc(&scrubbed_summary, 1000), "inline": false },
                 { "name": "Log Excerpt", "value": format!("```\n{discord_truncated}\n```"), "inline": false }
             ]
         }]
@@ -299,6 +358,7 @@ pub async fn submit_crash_webhook(
     })
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn submit_beta_feedback(
     webhook_url: &str,
     target: &str,
@@ -312,9 +372,18 @@ pub async fn submit_beta_feedback(
     include_diagnostics: bool,
     instance_id: &str,
 ) -> Result<FeedbackSubmitResult, String> {
-    let settings = crate::settings::load_settings();
-    let java = crate::java::detect_java();
-    let state = crate::sync::load_state(instance_id);
+    let inst_owned = instance_id.to_string();
+    let (settings, java, state) = tokio::task::spawn_blocking(move || {
+        (
+            crate::settings::load_settings(),
+            crate::java::detect_java(),
+            crate::sync::load_state(&inst_owned),
+        )
+    })
+    .await
+    .map_err(|e| e.to_string())?;
+
+    let scrubbed_desc = scrub_pii(description.trim());
 
     let diagnostics_json = if include_diagnostics {
         json!({
@@ -334,7 +403,7 @@ pub async fn submit_beta_feedback(
         "target": if target.trim().is_empty() { "launcher" } else { target.trim() },
         "category": category,
         "title": title.trim(),
-        "description": description.trim(),
+        "description": scrubbed_desc,
         "playerName": player_name,
         "playerUuid": player_uuid,
         "contact": contact.trim(),
@@ -342,11 +411,7 @@ pub async fn submit_beta_feedback(
         "diagnostics": diagnostics_json,
     });
 
-    let client = Client::builder()
-        .timeout(Duration::from_secs(15))
-        .build()
-        .map_err(|e| e.to_string())?;
-
+    let client = http_client();
     let gateway_url = format!("{PB_AUTH_BASE_URL}/api/public/launcher/report");
     let mut gateway_err: Option<String> = None;
 
@@ -363,18 +428,20 @@ pub async fn submit_beta_feedback(
                 });
             }
             if status.as_u16() == 429 || status.as_u16() == 400 {
-                return Err(body.error.unwrap_or_else(|| format!("Report rejected ({status})")));
+                return Err(body
+                    .error
+                    .unwrap_or_else(|| format!("Report rejected ({status})")));
             }
             gateway_err = body.error;
         }
     }
 
-    // Fallback to direct Discord webhook if configured
+    // Fallback to optional user-configured Discord webhook if valid
     let target_url = match resolve_webhook(webhook_url) {
         Ok(u) => u,
         Err(_) => {
             return Err(gateway_err.unwrap_or_else(|| {
-                "GitHub Issue Gateway is awaiting token configuration in my.petablocks.com/settings.".to_string()
+                "Could not reach the PETABLOCKS Report Gateway (my.petablocks.com). Please try again shortly.".to_string()
             }));
         }
     };
@@ -398,7 +465,7 @@ pub async fn submit_beta_feedback(
 
     fields.push(json!({
         "name": "Details",
-        "value": trunc(description, 1000),
+        "value": trunc(&scrubbed_desc, 1000),
         "inline": false
     }));
 
@@ -445,8 +512,84 @@ pub async fn submit_beta_feedback(
     })
 }
 
-/// Lightweight Windows Discord IPC Rich Presence updater (`\\.\pipe\discord-ipc-0`).
-/// Best-effort: silently no-ops if Discord is not running locally.
+struct DiscordRpcMsg {
+    details: String,
+    state_text: String,
+    pid: u32,
+    custom_start: Option<u64>,
+}
+
+/// Persistent background worker thread that keeps a single Discord IPC named pipe open (`\\.\pipe\discord-ipc-0`)
+/// and never blocks Tokio or UI threads even if the local Discord client is wedged.
+static DISCORD_RPC_SENDER: LazyLock<SyncSender<DiscordRpcMsg>> = LazyLock::new(|| {
+    let (tx, rx) = mpsc::sync_channel::<DiscordRpcMsg>(8);
+    std::thread::Builder::new()
+        .name("pb-discord-rpc".into())
+        .spawn(move || {
+            let mut active_pipe: Option<std::fs::File> = None;
+            while let Ok(msg) = rx.recv() {
+                if active_pipe.is_none() {
+                    active_pipe = connect_discord_pipe();
+                }
+                if let Some(pipe) = active_pipe.as_mut() {
+                    if send_activity_frame(pipe, &msg).is_err() {
+                        active_pipe = None;
+                        if let Some(mut fresh) = connect_discord_pipe() {
+                            if send_activity_frame(&mut fresh, &msg).is_ok() {
+                                active_pipe = Some(fresh);
+                            }
+                        }
+                    }
+                }
+            }
+        })
+        .ok();
+    tx
+});
+
+fn connect_discord_pipe() -> Option<std::fs::File> {
+    for i in 0..10 {
+        let pipe_name = format!(r"\\.\pipe\discord-ipc-{i}");
+        if let Ok(mut pipe) = OpenOptions::new().read(true).write(true).open(&pipe_name) {
+            let handshake = json!({ "v": 1, "client_id": DISCORD_APP_ID }).to_string();
+            if write_ipc_frame(&mut pipe, 0, handshake.as_bytes()).is_ok() {
+                return Some(pipe);
+            }
+        }
+    }
+    None
+}
+
+fn send_activity_frame(pipe: &mut std::fs::File, msg: &DiscordRpcMsg) -> std::io::Result<()> {
+    let start_time = msg.custom_start.unwrap_or_else(|| {
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0)
+    });
+
+    let cmd = json!({
+        "cmd": "SET_ACTIVITY",
+        "args": {
+            "pid": msg.pid,
+            "activity": {
+                "details": msg.details,
+                "state": msg.state_text,
+                "assets": {
+                    "large_image": "petablocks_logo",
+                    "large_text": "PETABLOCKS Season 2",
+                    "small_image": "minecraft",
+                    "small_text": "Minecraft 1.21.1 (NeoForge)"
+                },
+                "timestamps": { "start": start_time }
+            }
+        },
+        "nonce": format!("pb-{}", start_time)
+    })
+    .to_string();
+    write_ipc_frame(pipe, 1, cmd.as_bytes())
+}
+
 pub fn update_discord_rpc(details: &str, state_text: &str) {
     update_discord_rpc_with_pid(details, state_text, std::process::id(), None);
 }
@@ -457,45 +600,12 @@ pub fn update_discord_rpc_with_pid(
     pid: u32,
     custom_start: Option<u64>,
 ) {
-    for i in 0..10 {
-        let pipe_name = format!(r"\\.\pipe\discord-ipc-{i}");
-        if let Ok(mut pipe) = OpenOptions::new().read(true).write(true).open(&pipe_name) {
-            let handshake = json!({ "v": 1, "client_id": DISCORD_APP_ID }).to_string();
-            if write_ipc_frame(&mut pipe, 0, handshake.as_bytes()).is_err() {
-                continue;
-            }
-            let _ = read_ipc_frame(&mut pipe);
-
-            let start_time = custom_start.unwrap_or_else(|| {
-                SystemTime::now()
-                    .duration_since(UNIX_EPOCH)
-                    .map(|d| d.as_secs())
-                    .unwrap_or(0)
-            });
-
-            let cmd = json!({
-                "cmd": "SET_ACTIVITY",
-                "args": {
-                    "pid": pid,
-                    "activity": {
-                        "details": details,
-                        "state": state_text,
-                        "assets": {
-                            "large_image": "petablocks_logo",
-                            "large_text": "PETABLOCKS Season 2",
-                            "small_image": "minecraft",
-                            "small_text": "Minecraft 1.21.1 (NeoForge)"
-                        },
-                        "timestamps": { "start": start_time }
-                    }
-                },
-                "nonce": format!("pb-{}", start_time)
-            })
-            .to_string();
-            let _ = write_ipc_frame(&mut pipe, 1, cmd.as_bytes());
-            break;
-        }
-    }
+    let _ = DISCORD_RPC_SENDER.try_send(DiscordRpcMsg {
+        details: details.to_string(),
+        state_text: state_text.to_string(),
+        pid,
+        custom_start,
+    });
 }
 
 fn write_ipc_frame(pipe: &mut std::fs::File, opcode: u32, payload: &[u8]) -> std::io::Result<()> {
@@ -507,11 +617,25 @@ fn write_ipc_frame(pipe: &mut std::fs::File, opcode: u32, payload: &[u8]) -> std
     pipe.flush()
 }
 
-fn read_ipc_frame(pipe: &mut std::fs::File) -> std::io::Result<Vec<u8>> {
-    let mut header = [0u8; 8];
-    pipe.read_exact(&mut header)?;
-    let len = u32::from_le_bytes([header[4], header[5], header[6], header[7]]) as usize;
-    let mut buf = vec![0u8; len.min(65536)];
-    pipe.read_exact(&mut buf)?;
-    Ok(buf)
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn webhook_validation() {
+        assert!(resolve_webhook("https://discord.com/api/webhooks/123/abc").is_ok());
+        assert!(resolve_webhook("https://discordapp.com/api/webhooks/123/abc").is_ok());
+        assert!(resolve_webhook("https://evil.example.com/api/webhooks/123/abc").is_err());
+        assert!(resolve_webhook("http://discord.com/api/webhooks/123/abc").is_err());
+        assert!(resolve_webhook("").is_err());
+    }
+
+    #[test]
+    fn pii_scrubber_removes_windows_user_paths() {
+        let sample = r"Loaded from C:\Users\alice\AppData\Roaming\PETABLOCKS Launcher\instances\s2 and D:/Users/bob/Desktop/test.jar";
+        let scrubbed = scrub_pii(sample);
+        assert!(!scrubbed.contains("alice"), "scrubbed: {scrubbed}");
+        assert!(!scrubbed.contains("bob"), "scrubbed: {scrubbed}");
+        assert!(scrubbed.contains("<USERPROFILE>"));
+    }
 }

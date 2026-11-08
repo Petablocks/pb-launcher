@@ -140,45 +140,70 @@ export default function Home({ session, onSession, discordStatus, onDiscordStatu
 
   // Subscribe to Tauri events
   useEffect(() => {
+    let disposed = false;
     const unlisteners: (() => void)[] = [];
-    onSyncProgress((p) => {
-      if (p.instanceId === selectedInstance.id) setProgress(p);
-    }).then((u) => unlisteners.push(u));
-    onPlaytimeUpdated((instId, st) => {
-      setInstanceStates((prev) => ({ ...prev, [instId]: st }));
-      if (instId === selectedInstance.id) {
-        setSyncState(st);
-      }
-    }).then((u) => unlisteners.push(u));
-    onLaunchStatus((s) => setLaunchStatus(s)).then((u) => unlisteners.push(u));
-    onGameState((st) => {
-      if (st === "running") {
-        setGameRunning(true);
-        setLaunching(false);
-        setCrashReport(null);
-        setCrashSent(false);
-      } else if (st.startsWith("stopped")) {
-        setGameRunning(false);
-        setLaunching(false);
-        setLaunchStatus(null);
-        getSyncState(selectedInstance.id).then(setSyncState).catch(() => {});
-        const code = Number(st.split(":")[1] ?? "0");
-        if (code !== 0) {
-          setShowLogs(true);
-          setSyncError(`Game process exited unexpectedly with code ${code}. Check the Game Logs below for details.`);
-          getLatestCrashReport(selectedInstance.id)
-            .then((rep) => {
-              if (rep) setCrashReport(rep);
-            })
-            .catch(() => {});
+    const register = (p: Promise<() => void>) => {
+      p.then((u) => {
+        if (disposed) u();
+        else unlisteners.push(u);
+      }).catch(() => {});
+    };
+
+    register(
+      onSyncProgress((p) => {
+        if (!disposed && p.instanceId === selectedInstance.id) setProgress(p);
+      })
+    );
+    register(
+      onPlaytimeUpdated((instId, st) => {
+        if (disposed) return;
+        setInstanceStates((prev) => ({ ...prev, [instId]: st }));
+        if (instId === selectedInstance.id) {
+          setSyncState(st);
         }
-      }
-    }).then((u) => unlisteners.push(u));
-    onGameLog((entry) => {
-      setLogs((prev) => [...prev.slice(-999), entry]);
-    }).then((u) => unlisteners.push(u));
+      })
+    );
+    register(
+      onLaunchStatus((s) => {
+        if (!disposed) setLaunchStatus(s);
+      })
+    );
+    register(
+      onGameState((st) => {
+        if (disposed) return;
+        if (st === "running") {
+          setGameRunning(true);
+          setLaunching(false);
+          setCrashReport(null);
+          setCrashSent(false);
+        } else if (st.startsWith("stopped")) {
+          setGameRunning(false);
+          setLaunching(false);
+          setLaunchStatus(null);
+          getSyncState(selectedInstance.id).then(setSyncState).catch(() => {});
+          const code = Number(st.split(":")[1] ?? "0");
+          if (code !== 0) {
+            setShowLogs(true);
+            setSyncError(
+              `Game process exited unexpectedly with code ${code}. Check the Game Logs below for details.`
+            );
+            getLatestCrashReport(selectedInstance.id)
+              .then((rep) => {
+                if (!disposed && rep) setCrashReport(rep);
+              })
+              .catch(() => {});
+          }
+        }
+      })
+    );
+    register(
+      onGameLog((entry) => {
+        if (!disposed) setLogs((prev) => [...prev.slice(-999), entry]);
+      })
+    );
 
     return () => {
+      disposed = true;
       unlisteners.forEach((u) => u());
     };
   }, [selectedInstance.id]);

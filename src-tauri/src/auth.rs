@@ -2,9 +2,10 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::fs;
-use std::time::Duration;
+use std::sync::{LazyLock, Mutex};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use crate::sync::launcher_root;
+use crate::sync::{atomic_write, http_client, launcher_root};
 
 const KEYRING_SERVICE: &str = "com.petablocks.launcher";
 const KEYRING_USER: &str = "microsoft-account";
@@ -14,14 +15,31 @@ const SCOPE: &str = "XboxLive.signin offline_access";
 
 const DEFAULT_CLIENT_ID: &str = "acbc8721-204e-4445-8c3f-962fa445d718";
 
-/// Azure AD application (client) ID. Reads `PB_LAUNCHER_CLIENT_ID` at runtime or build time,
-/// falling back to the official PETABLOCKS Launcher registration.
-fn client_id() -> Result<String, String> {
-    Ok(std::env::var("PB_LAUNCHER_CLIENT_ID")
-        .ok()
-        .or_else(|| option_env!("PB_LAUNCHER_CLIENT_ID").map(String::from))
-        .filter(|s| !s.trim().is_empty())
-        .unwrap_or_else(|| DEFAULT_CLIENT_ID.to_string()))
+/// In-memory Minecraft access token + profile UUID so the raw JWT never needs to be trusted from WebView JS.
+static ACTIVE_MC_SESSION: LazyLock<Mutex<Option<(Profile, String)>>> =
+    LazyLock::new(|| Mutex::new(None));
+
+pub fn set_active_mc_session(profile: Profile, token: String) {
+    if let Ok(mut guard) = ACTIVE_MC_SESSION.lock() {
+        if token.trim().is_empty() {
+            *guard = None;
+        } else {
+            *guard = Some((profile, token));
+        }
+    }
+}
+
+pub fn get_active_mc_session() -> Option<(Profile, String)> {
+    ACTIVE_MC_SESSION.lock().ok().and_then(|g| g.clone())
+}
+
+/// Azure AD application (client) ID. Strictly compile-time (`option_env!`) so runtime environment
+/// variables cannot redirect OAuth device code sign-in to a rogue app registration.
+fn client_id() -> &'static str {
+    match option_env!("PB_LAUNCHER_CLIENT_ID") {
+        Some(s) if !s.is_empty() => s,
+        _ => DEFAULT_CLIENT_ID,
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -40,8 +58,8 @@ struct StoredAccount {
     profile: Profile,
 }
 
-/// Cached Minecraft token cached on disk in the launcher directory (`session-cache.json`).
-/// Contains the large JWT (~1.5KB) and expiration timestamp to avoid Mojang rate-limits.
+/// Cached Minecraft token on disk in the launcher directory (`session-cache.dpapi` on Windows).
+/// Encrypted with Windows DPAPI (`CryptProtectData`) bound to the current Windows user.
 #[derive(Serialize, Deserialize)]
 struct CachedToken {
     mc_token: String,
@@ -49,13 +67,111 @@ struct CachedToken {
 }
 
 fn session_cache_path() -> std::path::PathBuf {
+    launcher_root().join("session-cache.dpapi")
+}
+
+fn legacy_session_cache_path() -> std::path::PathBuf {
     launcher_root().join("session-cache.json")
 }
 
+#[cfg(windows)]
+fn dpapi_protect(plaintext: &[u8]) -> Option<Vec<u8>> {
+    use windows_sys::Win32::Foundation::LocalFree;
+    use windows_sys::Win32::Security::Cryptography::{
+        CryptProtectData, CRYPTPROTECT_UI_FORBIDDEN, CRYPT_INTEGER_BLOB,
+    };
+
+    unsafe {
+        let in_blob = CRYPT_INTEGER_BLOB {
+            cbData: plaintext.len() as u32,
+            pbData: plaintext.as_ptr() as *mut u8,
+        };
+        let mut out_blob = CRYPT_INTEGER_BLOB {
+            cbData: 0,
+            pbData: std::ptr::null_mut(),
+        };
+        let ok = CryptProtectData(
+            &in_blob,
+            std::ptr::null(),
+            std::ptr::null(),
+            std::ptr::null_mut(),
+            std::ptr::null(),
+            CRYPTPROTECT_UI_FORBIDDEN,
+            &mut out_blob,
+        );
+        if ok == 0 || out_blob.pbData.is_null() {
+            return None;
+        }
+        let slice = std::slice::from_raw_parts(out_blob.pbData, out_blob.cbData as usize);
+        let vec = slice.to_vec();
+        LocalFree(out_blob.pbData as *mut core::ffi::c_void);
+        Some(vec)
+    }
+}
+
+#[cfg(windows)]
+fn dpapi_unprotect(ciphertext: &[u8]) -> Option<Vec<u8>> {
+    use windows_sys::Win32::Foundation::LocalFree;
+    use windows_sys::Win32::Security::Cryptography::{
+        CryptUnprotectData, CRYPTPROTECT_UI_FORBIDDEN, CRYPT_INTEGER_BLOB,
+    };
+
+    unsafe {
+        let in_blob = CRYPT_INTEGER_BLOB {
+            cbData: ciphertext.len() as u32,
+            pbData: ciphertext.as_ptr() as *mut u8,
+        };
+        let mut out_blob = CRYPT_INTEGER_BLOB {
+            cbData: 0,
+            pbData: std::ptr::null_mut(),
+        };
+        let ok = CryptUnprotectData(
+            &in_blob,
+            std::ptr::null_mut(),
+            std::ptr::null(),
+            std::ptr::null_mut(),
+            std::ptr::null(),
+            CRYPTPROTECT_UI_FORBIDDEN,
+            &mut out_blob,
+        );
+        if ok == 0 || out_blob.pbData.is_null() {
+            return None;
+        }
+        let slice = std::slice::from_raw_parts(out_blob.pbData, out_blob.cbData as usize);
+        let vec = slice.to_vec();
+        LocalFree(out_blob.pbData as *mut core::ffi::c_void);
+        Some(vec)
+    }
+}
+
+#[cfg(not(windows))]
+fn dpapi_protect(plaintext: &[u8]) -> Option<Vec<u8>> {
+    Some(plaintext.to_vec())
+}
+
+#[cfg(not(windows))]
+fn dpapi_unprotect(ciphertext: &[u8]) -> Option<Vec<u8>> {
+    Some(ciphertext.to_vec())
+}
+
 fn load_cached_token() -> Option<CachedToken> {
+    // Remove any legacy plaintext session-cache.json on upgrade after migrating
+    let legacy = legacy_session_cache_path();
+    if legacy.exists() {
+        let migrated = fs::read_to_string(&legacy)
+            .ok()
+            .and_then(|s| serde_json::from_str::<CachedToken>(&s).ok());
+        let _ = fs::remove_file(&legacy);
+        if let Some(c) = migrated {
+            save_cached_token(&c.mc_token, c.expires_at);
+            return Some(c);
+        }
+    }
+
     let p = session_cache_path();
-    let data = fs::read_to_string(&p).ok()?;
-    serde_json::from_str(&data).ok()
+    let encrypted = fs::read(&p).ok()?;
+    let decrypted = dpapi_unprotect(&encrypted)?;
+    serde_json::from_slice(&decrypted).ok()
 }
 
 fn save_cached_token(mc_token: &str, expires_at: u64) {
@@ -63,13 +179,20 @@ fn save_cached_token(mc_token: &str, expires_at: u64) {
         mc_token: mc_token.to_string(),
         expires_at,
     };
-    if let Ok(json) = serde_json::to_string(&c) {
-        let _ = fs::write(session_cache_path(), json);
+    if let Ok(json_bytes) = serde_json::to_vec(&c) {
+        if let Some(encrypted) = dpapi_protect(&json_bytes) {
+            let _ = atomic_write(&session_cache_path(), &encrypted);
+        }
     }
+    let _ = fs::remove_file(legacy_session_cache_path());
 }
 
 fn clear_cached_token() {
     let _ = fs::remove_file(session_cache_path());
+    let _ = fs::remove_file(legacy_session_cache_path());
+    if let Ok(mut guard) = ACTIVE_MC_SESSION.lock() {
+        *guard = None;
+    }
 }
 
 #[derive(Serialize)]
@@ -81,20 +204,35 @@ pub struct DeviceCodeInfo {
     pub expires_in: u64,
 }
 
-/// Result returned to the UI. `access_token` is the Minecraft services token used at launch.
+/// Result returned to the UI. The raw Minecraft JWT is kept exclusively inside Rust (`ACTIVE_MC_SESSION`)
+/// and never exposed to the WebView JS context.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Session {
     pub profile: Profile,
+    #[serde(default)]
     pub access_token: String,
     pub offline: bool,
 }
 
-fn http() -> Client {
-    Client::builder()
-        .user_agent("PETABLOCKS-Launcher")
-        .timeout(Duration::from_secs(30))
-        .build()
-        .expect("http client")
+impl Session {
+    fn online(profile: Profile, mc_token: String) -> Self {
+        set_active_mc_session(profile.clone(), mc_token);
+        Self {
+            profile,
+            // Send a non-sensitive sentinel to the UI so existing `Boolean(session.access_token)` checks pass
+            // without exposing the actual bearer JWT to JavaScript.
+            access_token: "rust-managed".to_string(),
+            offline: false,
+        }
+    }
+
+    fn offline(profile: Profile) -> Self {
+        Self {
+            profile,
+            access_token: String::new(),
+            offline: true,
+        }
+    }
 }
 
 fn entry() -> Result<keyring::Entry, String> {
@@ -112,9 +250,9 @@ fn load_account() -> Option<StoredAccount> {
 }
 
 pub async fn start_device_login() -> Result<DeviceCodeInfo, String> {
-    let res: Value = http()
+    let res: Value = http_client()
         .post(DEVICE_CODE_URL)
-        .form(&[("client_id", client_id()?), ("scope", SCOPE.to_string())])
+        .form(&[("client_id", client_id()), ("scope", SCOPE)])
         .send()
         .await
         .map_err(|e| e.to_string())?
@@ -140,9 +278,13 @@ pub async fn start_device_login() -> Result<DeviceCodeInfo, String> {
 }
 
 /// Polls until the user completes sign-in in the browser.
-pub async fn complete_device_login(device_code: String, interval: u64, expires_in: u64) -> Result<Session, String> {
-    let client = http();
-    let id = client_id()?;
+pub async fn complete_device_login(
+    device_code: String,
+    interval: u64,
+    expires_in: u64,
+) -> Result<Session, String> {
+    let client = http_client();
+    let id = client_id();
     let mut waited = 0u64;
     let mut wait = interval.max(1);
     loop {
@@ -155,7 +297,7 @@ pub async fn complete_device_login(device_code: String, interval: u64, expires_i
             .post(TOKEN_URL)
             .form(&[
                 ("grant_type", "urn:ietf:params:oauth:grant-type:device_code"),
-                ("client_id", id.as_str()),
+                ("client_id", id),
                 ("device_code", device_code.as_str()),
             ])
             .send()
@@ -167,15 +309,20 @@ pub async fn complete_device_login(device_code: String, interval: u64, expires_i
         match res.get("error").and_then(|v| v.as_str()) {
             None => {
                 let access = res["access_token"].as_str().ok_or("Missing access token")?;
-                let refresh = res["refresh_token"].as_str().ok_or("Missing refresh token")?;
-                return finish_login(&client, access, refresh).await;
+                let refresh = res["refresh_token"]
+                    .as_str()
+                    .ok_or("Missing refresh token")?;
+                return finish_login(client, access, refresh).await;
             }
             Some("authorization_pending") => {}
             Some("slow_down") => wait += 5,
             Some("authorization_declined") => return Err("Sign-in was declined.".into()),
             Some("expired_token") => return Err("Sign-in code expired. Please try again.".into()),
             Some(_) => {
-                return Err(res["error_description"].as_str().unwrap_or("Sign-in failed").to_string())
+                return Err(res["error_description"]
+                    .as_str()
+                    .unwrap_or("Sign-in failed")
+                    .to_string())
             }
         }
     }
@@ -193,7 +340,9 @@ async fn finish_login(client: &Client, ms_access: &str, refresh: &str) -> Result
         }),
     )
     .await?;
-    let xbl_token = xbl["Token"].as_str().ok_or("Xbox Live authentication failed")?;
+    let xbl_token = xbl["Token"]
+        .as_str()
+        .ok_or("Xbox Live authentication failed")?;
 
     let xsts: Value = post_json(
         client,
@@ -207,14 +356,18 @@ async fn finish_login(client: &Client, ms_access: &str, refresh: &str) -> Result
     .await?;
     if let Some(code) = xsts.get("XErr").and_then(|v| v.as_u64()) {
         return Err(match code {
-            2148916233 => "This Microsoft account has no Xbox profile. Create one at xbox.com first.".into(),
+            2148916233 => {
+                "This Microsoft account has no Xbox profile. Create one at xbox.com first.".into()
+            }
             2148916235 => "Xbox Live is not available in your country/region.".into(),
             2148916238 => "This is a child account; add it to a Microsoft family to play.".into(),
             c => format!("Xbox authorization failed (XErr {c})."),
         });
     }
     let xsts_token = xsts["Token"].as_str().ok_or("XSTS authorization failed")?;
-    let uhs = xsts["DisplayClaims"]["xui"][0]["uhs"].as_str().ok_or("Missing Xbox user hash")?;
+    let uhs = xsts["DisplayClaims"]["xui"][0]["uhs"]
+        .as_str()
+        .ok_or("Missing Xbox user hash")?;
 
     let mc: Value = post_json(
         client,
@@ -244,12 +397,15 @@ async fn finish_login(client: &Client, ms_access: &str, refresh: &str) -> Result
     let p: Value = profile_res.json().await.map_err(|e| e.to_string())?;
     let profile = Profile {
         uuid: p["id"].as_str().ok_or("Missing profile id")?.to_string(),
-        name: p["name"].as_str().ok_or("Missing profile name")?.to_string(),
+        name: p["name"]
+            .as_str()
+            .ok_or("Missing profile name")?
+            .to_string(),
     };
 
     let expires_in = mc["expires_in"].as_u64().unwrap_or(86400);
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
         .map(|d| d.as_secs())
         .unwrap_or(0);
     let mc_token_expires_at = now + expires_in.saturating_sub(600); // 10 min buffer
@@ -260,10 +416,10 @@ async fn finish_login(client: &Client, ms_access: &str, refresh: &str) -> Result
         profile: profile.clone(),
     })?;
 
-    // 2. Cache the larger Minecraft services JWT to local disk to avoid Windows 2560 char limits
+    // 2. Cache the larger Minecraft services JWT to DPAPI-encrypted local file
     save_cached_token(&mc_token, mc_token_expires_at);
 
-    Ok(Session { profile, access_token: mc_token, offline: false })
+    Ok(Session::online(profile, mc_token))
 }
 
 async fn post_json(client: &Client, url: &str, body: Value) -> Result<Value, String> {
@@ -278,13 +434,12 @@ async fn post_json(client: &Client, url: &str, body: Value) -> Result<Value, Str
 }
 
 /// Restore the saved account at startup.
-/// Optimizations:
-/// 1. Uses cached valid mc_token if it hasn't expired yet (prevents unnecessary Mojang rate-limit hits on restarts/updates).
-/// 2. If rate-limited (TOO_MANY_REQUESTS) or offline, falls back to existing cached token/profile rather than failing.
 pub async fn restore() -> Result<Option<Session>, String> {
-    let Some(acc) = load_account() else { return Ok(None) };
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
+    let Some(acc) = load_account() else {
+        return Ok(None);
+    };
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
         .map(|d| d.as_secs())
         .unwrap_or(0);
 
@@ -293,50 +448,52 @@ pub async fn restore() -> Result<Option<Session>, String> {
     // Fast-path: if cached Minecraft token is still valid for at least 10 minutes, reuse it immediately!
     if let Some(c) = &cached {
         if c.expires_at > now && !c.mc_token.trim().is_empty() {
-            return Ok(Some(Session {
-                profile: acc.profile,
-                access_token: c.mc_token.clone(),
-                offline: false,
-            }));
+            return Ok(Some(Session::online(acc.profile, c.mc_token.clone())));
         }
     }
 
-    let client = http();
+    let client = http_client();
     let res = client
         .post(TOKEN_URL)
         .form(&[
             ("grant_type", "refresh_token"),
-            ("client_id", client_id()?.as_str()),
+            ("client_id", client_id()),
             ("refresh_token", acc.refresh_token.as_str()),
             ("scope", SCOPE),
         ])
         .send()
         .await;
 
-    let cached_token = cached.map(|c| c.mc_token).unwrap_or_default();
-    // Network/transient failure: keep the account, report offline so the UI can retry later.
-    let offline = |profile: Profile, token: String| Some(Session { profile, access_token: token, offline: true });
+    let (cached_token, cached_valid) = match cached {
+        Some(c) => {
+            let valid = c.expires_at > now && !c.mc_token.trim().is_empty();
+            (c.mc_token, valid)
+        }
+        None => (String::new(), false),
+    };
 
-    let Ok(res) = res else { return Ok(offline(acc.profile, cached_token)) };
-    let Ok(v) = res.json::<Value>().await else { return Ok(offline(acc.profile, cached_token)) };
+    let Ok(res) = res else {
+        return Ok(Some(Session::offline(acc.profile)));
+    };
+    let Ok(v) = res.json::<Value>().await else {
+        return Ok(Some(Session::offline(acc.profile)));
+    };
 
     match (v["access_token"].as_str(), v["refresh_token"].as_str()) {
-        (Some(a), Some(r)) => match finish_login(&client, a, r).await {
+        (Some(a), Some(r)) => match finish_login(client, a, r).await {
             Ok(session) => Ok(Some(session)),
-            Err(e) if e.contains("TOO_MANY_REQUESTS") && !cached_token.is_empty() => {
-                // Rate limited by Mojang: fallback to cached token so player isn't blocked!
-                Ok(Some(Session { profile: acc.profile, access_token: cached_token, offline: false }))
+            Err(e) if e.contains("TOO_MANY_REQUESTS") && cached_valid => {
+                // Rate limited by Mojang, and our cached token is still unexpired
+                Ok(Some(Session::online(acc.profile, cached_token)))
             }
-            // Xbox/Minecraft services unreachable or erroring: don't block or sign out.
-            Err(_) => Ok(offline(acc.profile, cached_token)),
+            // Expired cached token or unreachable service: mark offline so the user is prompted to re-verify
+            Err(_) => Ok(Some(Session::offline(acc.profile))),
         },
         _ if v["error"].as_str() == Some("invalid_grant") => {
-            // Refresh token revoked/expired: require a fresh sign-in.
             let _ = logout();
             Ok(None)
         }
-        // Any other failure (5xx, throttling, temporarily_unavailable): keep credentials.
-        _ => Ok(offline(acc.profile, cached_token)),
+        _ => Ok(Some(Session::offline(acc.profile))),
     }
 }
 
@@ -345,5 +502,20 @@ pub fn logout() -> Result<(), String> {
     match entry()?.delete_credential() {
         Ok(_) | Err(keyring::Error::NoEntry) => Ok(()),
         Err(e) => Err(e.to_string()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn dpapi_roundtrip() {
+        let secret = b"test-minecraft-jwt-payload";
+        let enc = dpapi_protect(secret).expect("dpapi_protect");
+        #[cfg(windows)]
+        assert_ne!(enc.as_slice(), secret);
+        let dec = dpapi_unprotect(&enc).expect("dpapi_unprotect");
+        assert_eq!(dec.as_slice(), secret);
     }
 }

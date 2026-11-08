@@ -3,6 +3,29 @@
 All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.11.0] - 2026-11-08
+### Added
+- **Streaming Downloader & Slow-Connection Resilience**:
+  - Upgraded modpack, Java 21, and game asset downloads to stream directly to disk with per-chunk read timeouts so large files download reliably even on slower internet connections.
+  - Added SHA-256 and SHA-512 integrity verification for modpack files and updates.
+- **Crash-Safe Settings & Playtime Saving**:
+  - All launcher settings, disabled mod preferences, and playtime counters now save atomically so unexpected PC restarts or power loss never reset your settings or playtime.
+- **Automatic Local Data Migration**:
+  - Automatically migrates launcher instances and game files to Windows Local AppData for faster disk performance and cleaner Windows profile behavior.
+
+### Changed
+- **Faster, Smoother UI & Discord Rich Presence**:
+  - Moved Java detection, file checks, and Discord Rich Presence onto dedicated background workers so dragging, minimizing, and navigating the launcher stays responsive at all times.
+  - Added a safeguard preventing the launcher window from closing accidentally while a modpack update is actively downloading.
+- **Enhanced Account & Privacy Protection**:
+  - Encrypted cached sign-in sessions using Windows Data Protection (DPAPI) and automatically scrubbed local Windows folder paths from crash report excerpts.
+
+### Fixed
+- **Java 21+ Detection Improvements**:
+  - Improved Java version detection to support all JDK 21+ releases (including GA builds and newer major versions) across custom and system installation folders.
+- **Multi-Instance Sync Isolation**:
+  - Added per-instance launch and sync guards so two instances or downloads can never conflict simultaneously.
+
 ## [1.10.1] - 2026-11-08
 ### Added
 - **Live Playtime & Session Counter Across Cards & Sidebar**:

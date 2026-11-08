@@ -13,8 +13,27 @@
     "core:window:allow-toggle-maximize",
     "core:window:allow-close",
     "core:window:allow-start-dragging",
-    "opener:allow-open-url",
-    "opener:allow-open-path"
+    {
+      "identifier": "opener:allow-open-url",
+      "allow": [
+        { "url": "https://microsoft.com/*" },
+        { "url": "https://www.microsoft.com/*" },
+        { "url": "https://login.live.com/*" },
+        { "url": "https://login.microsoftonline.com/*" },
+        { "url": "https://petablocks.com/*" },
+        { "url": "https://*.petablocks.com/*" },
+        { "url": "https://github.com/Petablocks/*" },
+        { "url": "https://discord.gg/*" },
+        { "url": "https://discord.com/*" },
+        { "url": "https://buymeacoffee.com/*" }
+      ]
+    },
+    {
+      "identifier": "opener:allow-open-path",
+      "allow": [
+        { "path": "$LOCALAPPDATA/PETABLOCKS Launcher/**" },
+        { "path": "$APPDATA/PETABLOCKS Launcher/**" }
+      ]
+    }
   ]
 }
-

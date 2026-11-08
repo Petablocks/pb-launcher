@@ -7,6 +7,8 @@ export interface LauncherMod {
   path: string;
   url: string;
   sha1: string;
+  sha256?: string;
+  sha512?: string;
   size: number;
   category: string;
   optional: boolean;
@@ -22,6 +24,8 @@ export interface LauncherManifest {
   loader: string;
   neoforge: string;
   mrpackUrl: string;
+  mrpackSha256?: string;
+  mrpackSize?: number;
   mods: LauncherMod[];
 }
 

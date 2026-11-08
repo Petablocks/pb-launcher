@@ -1,25 +1,28 @@
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use sha1::{Digest, Sha1};
 use std::collections::HashMap;
-use std::fs::{self, File};
-use std::io::Read;
+use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Emitter, Manager};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command as TokioCommand;
 use tokio::sync::Semaphore;
+use tokio::task::JoinSet;
 
-use crate::auth::Session;
+use crate::auth::{get_active_mc_session, Session};
 use crate::java::ensure_java_21;
 use crate::settings::load_settings;
-use crate::sync::{instance_dir, launcher_root};
+use crate::sync::{
+    atomic_write, download_to, http_client, instance_dir, launcher_root, validate_version_token,
+    verify_file_hash, ExpectedHash, InstanceActionGuard,
+};
 
-const VERSION_MANIFEST_URL: &str = "https://piston-meta.mojang.com/mc/game/version_manifest_v2.json";
+const VERSION_MANIFEST_URL: &str =
+    "https://piston-meta.mojang.com/mc/game/version_manifest_v2.json";
 const RESOURCES_BASE_URL: &str = "https://resources.download.minecraft.net";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -39,28 +42,6 @@ pub struct GameLogLine {
     pub is_error: bool,
 }
 
-fn http() -> Client {
-    Client::builder()
-        .user_agent(concat!("PETABLOCKS-Launcher/", env!("CARGO_PKG_VERSION")))
-        .timeout(Duration::from_secs(120))
-        .build()
-        .expect("http client")
-}
-
-fn sha1_file(path: &Path) -> Option<String> {
-    let mut f = File::open(path).ok()?;
-    let mut hasher = Sha1::new();
-    let mut buf = [0u8; 65536];
-    loop {
-        let n = f.read(&mut buf).ok()?;
-        if n == 0 {
-            break;
-        }
-        hasher.update(&buf[..n]);
-    }
-    Some(hex::encode(hasher.finalize()))
-}
-
 fn rule_allows_windows(rules: Option<&Vec<Value>>) -> bool {
     let Some(rules) = rules else {
         return true;
@@ -68,12 +49,10 @@ fn rule_allows_windows(rules: Option<&Vec<Value>>) -> bool {
     let mut allowed = false;
     for rule in rules {
         let action = rule["action"].as_str().unwrap_or("allow") == "allow";
-        // Skip feature-gated rules like is_demo_user or has_custom_resolution
         if rule.get("features").is_some() {
             continue;
         }
         if let Some(os) = rule.get("os") {
-            // We only target 64-bit x86; arm64/x86 rules never match.
             if os["arch"].as_str().is_some_and(|a| a != "x86_64") {
                 continue;
             }
@@ -109,17 +88,20 @@ fn maven_coord_to_path(coord: &str) -> Option<String> {
     Some(format!("{group}/{artifact}/{version}/{file}"))
 }
 
-async fn ensure_file(client: &Client, url: &str, dest: &Path, expected_sha1: Option<&str>) -> Result<(), String> {
-    if dest.exists() {
-        if let Some(sha) = expected_sha1 {
-            if sha1_file(dest).map(|h| h.eq_ignore_ascii_case(sha)).unwrap_or(false) {
-                return Ok(());
-            }
-        } else {
-            return Ok(());
-        }
+async fn ensure_file(
+    client: &Client,
+    url: &str,
+    dest: &Path,
+    expected_sha1: Option<&str>,
+) -> Result<(), String> {
+    let expected = match expected_sha1 {
+        Some(s) if !s.is_empty() => ExpectedHash::Sha1(s),
+        _ => ExpectedHash::None,
+    };
+    if dest.exists() && verify_file_hash(dest, expected) {
+        return Ok(());
     }
-    crate::sync::download_to(client, url, dest, expected_sha1).await
+    download_to(client, url, dest, expected).await
 }
 
 async fn setup_vanilla(
@@ -128,6 +110,7 @@ async fn setup_vanilla(
     mc_version: &str,
     root: &Path,
 ) -> Result<Value, String> {
+    validate_version_token("minecraft_version", mc_version)?;
     let emit = |msg: &str| {
         let _ = app.emit("launch-status", msg.to_string());
     };
@@ -165,8 +148,7 @@ async fn setup_vanilla(
             .await
             .map_err(|e| e.to_string())?;
 
-        fs::create_dir_all(&version_dir).map_err(|e| e.to_string())?;
-        fs::write(&version_json_path, &txt).map_err(|e| e.to_string())?;
+        atomic_write(&version_json_path, txt.as_bytes())?;
         serde_json::from_str(&txt).map_err(|e| e.to_string())?
     };
 
@@ -191,22 +173,37 @@ async fn setup_vanilla(
                     artifact.get("path").and_then(|v| v.as_str()),
                     artifact.get("url").and_then(|v| v.as_str()),
                 ) {
-                    let sha = artifact.get("sha1").and_then(|v| v.as_str()).map(String::from);
+                    if path.contains("..") {
+                        continue;
+                    }
+                    let sha = artifact
+                        .get("sha1")
+                        .and_then(|v| v.as_str())
+                        .map(String::from);
                     lib_tasks.push((url.to_string(), libs_dir.join(path), sha));
                 }
             }
         }
     }
 
-    emit(&format!("Verifying {} vanilla libraries...", lib_tasks.len()));
+    emit(&format!(
+        "Verifying {} vanilla libraries...",
+        lib_tasks.len()
+    ));
     download_batch(client, lib_tasks).await?;
 
     // Asset index & objects
     let asset_index = &version_json["assetIndex"];
     let asset_id = asset_index["id"].as_str().ok_or("Missing assetIndex id")?;
-    let asset_url = asset_index["url"].as_str().ok_or("Missing assetIndex url")?;
+    validate_version_token("asset_id", asset_id)?;
+    let asset_url = asset_index["url"]
+        .as_str()
+        .ok_or("Missing assetIndex url")?;
     let asset_sha1 = asset_index["sha1"].as_str();
-    let index_path = root.join("assets").join("indexes").join(format!("{asset_id}.json"));
+    let index_path = root
+        .join("assets")
+        .join("indexes")
+        .join(format!("{asset_id}.json"));
     ensure_file(client, asset_url, &index_path, asset_sha1).await?;
 
     let index_txt = fs::read_to_string(&index_path).map_err(|e| e.to_string())?;
@@ -215,6 +212,9 @@ async fn setup_vanilla(
     if let Some(objects) = index_val["objects"].as_object() {
         for (_name, obj) in objects {
             if let Some(hash) = obj["hash"].as_str() {
+                if hash.len() < 4 || !hash.chars().all(|c| c.is_ascii_hexdigit()) {
+                    continue;
+                }
                 let prefix = &hash[..2];
                 let dest = root.join("assets").join("objects").join(prefix).join(hash);
                 if !dest.exists() {
@@ -226,7 +226,10 @@ async fn setup_vanilla(
     }
 
     if !asset_tasks.is_empty() {
-        emit(&format!("Downloading {} game assets...", asset_tasks.len()));
+        emit(&format!(
+            "Downloading {} game assets...",
+            asset_tasks.len()
+        ));
         download_batch(client, asset_tasks).await?;
     }
 
@@ -238,17 +241,27 @@ async fn download_batch(
     tasks: Vec<(String, PathBuf, Option<String>)>,
 ) -> Result<(), String> {
     let sem = Arc::new(Semaphore::new(10));
-    let mut handles = Vec::with_capacity(tasks.len());
+    let mut join_set = JoinSet::new();
     for (url, dest, sha) in tasks {
         let sem = sem.clone();
         let client = client.clone();
-        handles.push(tokio::spawn(async move {
+        join_set.spawn(async move {
             let _p = sem.acquire().await.map_err(|e| e.to_string())?;
             ensure_file(&client, &url, &dest, sha.as_deref()).await
-        }));
+        });
     }
-    for h in handles {
-        h.await.map_err(|e| e.to_string())??;
+    while let Some(res) = join_set.join_next().await {
+        match res {
+            Ok(Ok(())) => {}
+            Ok(Err(err)) => {
+                join_set.abort_all();
+                return Err(err);
+            }
+            Err(join_err) => {
+                join_set.abort_all();
+                return Err(join_err.to_string());
+            }
+        }
     }
     Ok(())
 }
@@ -260,6 +273,7 @@ async fn setup_neoforge(
     neoforge_version: &str,
     root: &Path,
 ) -> Result<Value, String> {
+    validate_version_token("neoforge_version", neoforge_version)?;
     let profile_id = format!("neoforge-{neoforge_version}");
     let nf_version_dir = root.join("versions").join(&profile_id);
     let nf_json_path = nf_version_dir.join(format!("{profile_id}.json"));
@@ -270,10 +284,9 @@ async fn setup_neoforge(
             format!("Installing NeoForge {neoforge_version} client (one-time setup)..."),
         );
 
-        // Ensure launcher_profiles.json exists so NeoForge installer succeeds
         let profiles_path = root.join("launcher_profiles.json");
         if !profiles_path.exists() {
-            fs::write(&profiles_path, r#"{"profiles":{}}"#).map_err(|e| e.to_string())?;
+            atomic_write(&profiles_path, br#"{"profiles":{}}"#)?;
         }
 
         let installer_url = format!(
@@ -282,21 +295,33 @@ async fn setup_neoforge(
         let installer_jar = root
             .join("cache")
             .join(format!("neoforge-{neoforge_version}-installer.jar"));
-        // Maven publishes a .sha1 next to every artifact; verify the installer we are about to run.
-        let installer_sha1 = match client.get(format!("{installer_url}.sha1")).send().await {
-            Ok(r) if r.status().is_success() => r
-                .text()
-                .await
-                .ok()
-                .map(|t| t.trim().chars().take(40).collect::<String>())
-                .filter(|s| s.len() == 40),
-            _ => None,
-        };
-        // A previously cached installer of unknown provenance must not be trusted when we can verify.
-        if installer_sha1.is_some() && installer_jar.exists() {
-            let _ = fs::remove_file(&installer_jar);
+
+        // Mandatory fail-closed SHA-1 verification before executing the NeoForge installer jar.
+        let sha1_resp = client
+            .get(format!("{installer_url}.sha1"))
+            .send()
+            .await
+            .and_then(|r| r.error_for_status())
+            .map_err(|e| format!("Failed to fetch NeoForge installer SHA-1 checksum: {e}"))?;
+        let sha1_text = sha1_resp
+            .text()
+            .await
+            .map_err(|e| format!("Failed reading NeoForge installer SHA-1: {e}"))?;
+        let installer_sha1: String = sha1_text.trim().chars().take(40).collect();
+        if installer_sha1.len() != 40 || !installer_sha1.chars().all(|c| c.is_ascii_hexdigit()) {
+            return Err(
+                "NeoForge Maven returned an invalid SHA-1 checksum; refusing to execute unverified installer."
+                    .into(),
+            );
         }
-        ensure_file(client, &installer_url, &installer_jar, installer_sha1.as_deref()).await?;
+
+        ensure_file(
+            client,
+            &installer_url,
+            &installer_jar,
+            Some(&installer_sha1),
+        )
+        .await?;
 
         let mut cmd = TokioCommand::new(java_exe);
         cmd.arg("-jar")
@@ -322,7 +347,6 @@ async fn setup_neoforge(
         .map_err(|e| format!("Failed reading NeoForge version profile: {e}"))?;
     let nf_json: Value = serde_json::from_str(&txt).map_err(|e| e.to_string())?;
 
-    // Ensure all libraries declared in NeoForge version JSON are present
     let libs_dir = root.join("libraries");
     let mut tasks = Vec::new();
     if let Some(libs) = nf_json["libraries"].as_array() {
@@ -332,8 +356,11 @@ async fn setup_neoforge(
                     artifact.get("path").and_then(|v| v.as_str()),
                     artifact.get("url").and_then(|v| v.as_str()),
                 ) {
-                    if !url.is_empty() {
-                        let sha = artifact.get("sha1").and_then(|v| v.as_str()).map(String::from);
+                    if !url.is_empty() && !path.contains("..") {
+                        let sha = artifact
+                            .get("sha1")
+                            .and_then(|v| v.as_str())
+                            .map(String::from);
                         tasks.push((url.to_string(), libs_dir.join(path), sha));
                     }
                 }
@@ -357,7 +384,9 @@ fn expand_placeholders(arg: &str, vars: &HashMap<&str, String>) -> String {
 
 fn collect_args(node: &Value, vars: &HashMap<&str, String>) -> Vec<String> {
     let mut out = Vec::new();
-    let Some(arr) = node.as_array() else { return out };
+    let Some(arr) = node.as_array() else {
+        return out;
+    };
     for item in arr {
         if let Some(s) = item.as_str() {
             out.push(expand_placeholders(s, vars));
@@ -383,7 +412,9 @@ fn collect_args(node: &Value, vars: &HashMap<&str, String>) -> Vec<String> {
 
 fn collect_library_paths(ver_json: &Value, libs_dir: &Path) -> Vec<String> {
     let mut out = Vec::new();
-    let Some(libs) = ver_json["libraries"].as_array() else { return out };
+    let Some(libs) = ver_json["libraries"].as_array() else {
+        return out;
+    };
     for lib in libs {
         if !rule_allows_windows(lib["rules"].as_array()) {
             continue;
@@ -393,6 +424,9 @@ fn collect_library_paths(ver_json: &Value, libs_dir: &Path) -> Vec<String> {
             .map(String::from)
             .or_else(|| lib["name"].as_str().and_then(maven_coord_to_path));
         if let Some(r) = rel {
+            if r.contains("..") {
+                continue;
+            }
             let full = libs_dir.join(r.replace('/', "\\"));
             if full.exists() {
                 out.push(full.to_string_lossy().to_string());
@@ -402,13 +436,64 @@ fn collect_library_paths(ver_json: &Value, libs_dir: &Path) -> Vec<String> {
     out
 }
 
+/// Assigns the spawned child process to a Windows Job Object so OS process accounting groups it cleanly.
+#[cfg(windows)]
+fn assign_child_to_job_object(pid: u32) {
+    use windows_sys::Win32::Foundation::CloseHandle;
+    use windows_sys::Win32::System::JobObjects::{AssignProcessToJobObject, CreateJobObjectW};
+    use windows_sys::Win32::System::Threading::{
+        OpenProcess, PROCESS_SET_QUOTA, PROCESS_TERMINATE,
+    };
+
+    unsafe {
+        let job = CreateJobObjectW(std::ptr::null(), std::ptr::null());
+        if job.is_null() {
+            return;
+        }
+        let proc_handle = OpenProcess(PROCESS_SET_QUOTA | PROCESS_TERMINATE, 0, pid);
+        if !proc_handle.is_null() {
+            let _ = AssignProcessToJobObject(job, proc_handle);
+            let _ = CloseHandle(proc_handle);
+        }
+        // Keep the job handle open without JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE so an updater restart
+        // does not abruptly kill a live world save.
+        let _ = CloseHandle(job);
+    }
+}
+
 pub async fn launch_game(app: AppHandle, req: LaunchRequest) -> Result<(), String> {
-    // Strict Mojang AppID Policy Compliance: Reject launch unless online session & access token are present
-    if req.session.offline || req.session.access_token.trim().is_empty() || req.session.profile.uuid.trim().is_empty() {
+    // 1. Validate all version and instance identifiers before touching the filesystem
+    validate_version_token("instance_id", &req.instance_id)?;
+    validate_version_token("minecraft_version", &req.minecraft_version)?;
+    if !req.neoforge_version.trim().is_empty() {
+        validate_version_token("neoforge_version", &req.neoforge_version)?;
+    }
+
+    // 2. Acquire per-instance concurrency guard (transferred to the exit watcher once spawned)
+    let instance_guard = InstanceActionGuard::try_acquire(&req.instance_id, false)?;
+
+    // 3. Retrieve verified Minecraft session & JWT strictly from Rust memory
+    let Some((verified_profile, mc_access_token)) = get_active_mc_session() else {
         return Err(
             "Launch blocked: A verified Microsoft account owning Minecraft: Java Edition is required before launching."
                 .into(),
         );
+    };
+    if req.session.offline || verified_profile.uuid.trim().is_empty() || mc_access_token.trim().is_empty() {
+        return Err(
+            "Launch blocked: Your Minecraft session is offline or expired. Please sign in again."
+                .into(),
+        );
+    }
+
+    // 4. Backend enforcement of Closed Beta Discord link & guild membership
+    if let Ok(discord) = crate::community::check_discord_link(&verified_profile.uuid).await {
+        if !discord.linked || !discord.in_guild {
+            return Err(
+                "Launch blocked: Please link your Discord account and join the PETABLOCKS Discord server to play."
+                    .into(),
+            );
+        }
     }
 
     let settings = load_settings();
@@ -416,17 +501,17 @@ pub async fn launch_game(app: AppHandle, req: LaunchRequest) -> Result<(), Strin
     let game_dir = instance_dir(&req.instance_id);
     fs::create_dir_all(&game_dir).map_err(|e| e.to_string())?;
 
-    // 1. Ensure Java 21
+    // 5. Ensure Java 21
     let java_exe = crate::java::cli_java(&ensure_java_21(&app).await?);
 
-    // 2. Ensure Vanilla 1.21.1 + assets
-    let client = http();
-    let vanilla_json = setup_vanilla(&app, &client, &req.minecraft_version, &root).await?;
+    // 6. Ensure Vanilla 1.21.1 + assets
+    let client = http_client();
+    let vanilla_json = setup_vanilla(&app, client, &req.minecraft_version, &root).await?;
 
-    // 3. Ensure NeoForge
-    let nf_json = setup_neoforge(&app, &client, &java_exe, &req.neoforge_version, &root).await?;
+    // 7. Ensure NeoForge
+    let nf_json = setup_neoforge(&app, client, &java_exe, &req.neoforge_version, &root).await?;
 
-    // 4. Construct Classpath & Arguments
+    // 8. Construct Classpath & Arguments
     let libs_dir = root.join("libraries");
     let assets_dir = root.join("assets");
     let natives_dir = root.join("natives").join(&req.minecraft_version);
@@ -439,11 +524,6 @@ pub async fn launch_game(app: AppHandle, req: LaunchRequest) -> Result<(), Strin
         }
     }
 
-    // Only append the vanilla client jar if launching vanilla without NeoForge.
-    // NeoForge provides its own patched client provider (e.g. client-...-srg.jar)
-    // and defines module "minecraft". Appending vanilla 1.21.1.jar causes Java's
-    // ModuleLayer to see duplicate package exports between module "minecraft" and
-    // automatic module "_1._21._1" (ResolutionException).
     if req.neoforge_version.trim().is_empty() {
         let vanilla_jar = root
             .join("versions")
@@ -451,7 +531,6 @@ pub async fn launch_game(app: AppHandle, req: LaunchRequest) -> Result<(), Strin
             .join(format!("{}.jar", req.minecraft_version));
         cp_entries.push(vanilla_jar.to_string_lossy().to_string());
     } else {
-        // Extra safeguard: strip any vanilla client jar from the NeoForge classpath
         let vanilla_filename = format!("{}.jar", req.minecraft_version);
         cp_entries.retain(|p| !p.ends_with(&vanilla_filename));
     }
@@ -464,18 +543,21 @@ pub async fn launch_game(app: AppHandle, req: LaunchRequest) -> Result<(), Strin
     let profile_id = format!("neoforge-{}", req.neoforge_version);
 
     let mut vars: HashMap<&str, String> = HashMap::new();
-    vars.insert("auth_player_name", req.session.profile.name.clone());
+    vars.insert("auth_player_name", verified_profile.name.clone());
     vars.insert("version_name", profile_id.clone());
     vars.insert("game_directory", game_dir.to_string_lossy().to_string());
     vars.insert("assets_root", assets_dir.to_string_lossy().to_string());
     vars.insert("assets_index_name", asset_index_id);
-    vars.insert("auth_uuid", req.session.profile.uuid.clone());
-    vars.insert("auth_access_token", req.session.access_token.clone());
+    vars.insert("auth_uuid", verified_profile.uuid.clone());
+    vars.insert("auth_access_token", mc_access_token);
     vars.insert("clientid", "acbc8721-204e-4445-8c3f-962fa445d718".into());
     vars.insert("auth_xuid", "0".into());
     vars.insert("user_type", "msa".into());
     vars.insert("version_type", "release".into());
-    vars.insert("natives_directory", natives_dir.to_string_lossy().to_string());
+    vars.insert(
+        "natives_directory",
+        natives_dir.to_string_lossy().to_string(),
+    );
     vars.insert("launcher_name", "PETABLOCKS-Launcher".into());
     vars.insert("launcher_version", env!("CARGO_PKG_VERSION").into());
     vars.insert("classpath", classpath);
@@ -483,10 +565,12 @@ pub async fn launch_game(app: AppHandle, req: LaunchRequest) -> Result<(), Strin
     vars.insert("library_directory", libs_dir.to_string_lossy().to_string());
 
     let mut full_args: Vec<String> = Vec::new();
-    // Xms must never exceed Xmx or the JVM refuses to start.
-    // Never hand the JVM more than 75% of physical RAM (min 2 GB), or the OS starts swapping.
     let total_mb = crate::settings::system_memory_mb();
-    let cap = if total_mb > 0 { ((total_mb * 3 / 4).max(2048)) as u32 } else { u32::MAX };
+    let cap = if total_mb > 0 {
+        ((total_mb * 3 / 4).max(2048)) as u32
+    } else {
+        u32::MAX
+    };
     let xmx = settings.memory_mb.max(1024).min(cap);
     full_args.push(format!("-Xmx{xmx}M"));
     full_args.push(format!("-Xms{}M", xmx.min(2048)));
@@ -505,12 +589,9 @@ pub async fn launch_game(app: AppHandle, req: LaunchRequest) -> Result<(), Strin
     full_args.extend(collect_args(&vanilla_json["arguments"]["game"], &vars));
     full_args.extend(collect_args(&nf_json["arguments"]["game"], &vars));
 
-    // Direct connect to server if enabled in settings
     if settings.direct_connect && !req.server_address.trim().is_empty() {
         full_args.push("--quickPlayMultiplayer".into());
-        // Pass bare hostname (e.g. s2.petablocks.com or create2.petablocks.com) so Minecraft client resolves SRV automatically
-        let addr = req.server_address.trim().to_string();
-        full_args.push(addr);
+        full_args.push(req.server_address.trim().to_string());
     }
 
     let _ = app.emit("launch-status", "Starting Minecraft (NeoForge)...");
@@ -524,24 +605,27 @@ pub async fn launch_game(app: AppHandle, req: LaunchRequest) -> Result<(), Strin
         .stderr(Stdio::piped());
 
     #[cfg(windows)]
-    mc_cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW: ensures no console window ever spawns
+    mc_cmd.creation_flags(0x08000000);
 
     let mut child = mc_cmd
         .spawn()
         .map_err(|e| format!("Failed to spawn Minecraft process: {e}"))?;
 
-    // Immediately record session start (+1 session) and notify frontend
+    let game_pid = child.id().unwrap_or_else(std::process::id);
+    #[cfg(windows)]
+    assign_child_to_job_object(game_pid);
+
+    // Record session start (+1 session) and notify frontend
     let initial_state = crate::sync::record_session_start(&req.instance_id);
     let _ = app.emit("playtime-updated", (&req.instance_id, &initial_state));
 
-    let game_pid = child.id().unwrap_or_else(|| std::process::id());
     let server_addr = req.server_address.clone();
-    let rpc_start = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
+    let rpc_start = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
         .map(|d| d.as_secs())
         .unwrap_or(0);
 
-    // Initial Discord update attached directly to Minecraft's process ID
+    // Non-blocking Discord RPC update via background IPC worker
     crate::community::update_discord_rpc_with_pid(
         "Playing PETABLOCKS Season 2",
         &format!("Connected to {server_addr}"),
@@ -549,16 +633,13 @@ pub async fn launch_game(app: AppHandle, req: LaunchRequest) -> Result<(), Strin
         Some(rpc_start),
     );
 
-    // Spawn a persistent heartbeat task that keeps Discord Rich Presence alive
-    // and flushes playtime to disk every 15 seconds while the game is running
     let (rpc_tx, mut rpc_rx) = tokio::sync::mpsc::channel::<()>(1);
-    let last_saved_instant = std::sync::Arc::new(std::sync::Mutex::new(Instant::now()));
+    let last_saved_instant = Arc::new(std::sync::Mutex::new(Instant::now()));
     let last_saved_for_tick = last_saved_instant.clone();
     let inst_for_tick = req.instance_id.clone();
     let app_for_tick = app.clone();
     tokio::spawn(async move {
         let mut interval = tokio::time::interval(std::time::Duration::from_secs(15));
-        // First tick fires immediately; skip it so we don't double-emit at 0s
         interval.tick().await;
         loop {
             tokio::select! {
@@ -575,21 +656,20 @@ pub async fn launch_game(app: AppHandle, req: LaunchRequest) -> Result<(), Strin
                         }
                     };
                     if delta > 0 {
-                        let st = crate::sync::add_playtime_delta(&inst_for_tick, delta);
-                        let _ = app_for_tick.emit("playtime-updated", (&inst_for_tick, &st));
+                        let inst_clone = inst_for_tick.clone();
+                        if let Ok(st) = tokio::task::spawn_blocking(move || {
+                            crate::sync::add_playtime_delta(&inst_clone, delta)
+                        }).await {
+                            let _ = app_for_tick.emit("playtime-updated", (&inst_for_tick, &st));
+                        }
                     }
 
-                    // Blocking pipe I/O: keep it off the async worker threads.
-                    let state = format!("Connected to {server_addr}");
-                    let _ = tokio::task::spawn_blocking(move || {
-                        crate::community::update_discord_rpc_with_pid(
-                            "Playing PETABLOCKS Season 2",
-                            &state,
-                            game_pid,
-                            Some(rpc_start),
-                        );
-                    })
-                    .await;
+                    crate::community::update_discord_rpc_with_pid(
+                        "Playing PETABLOCKS Season 2",
+                        &format!("Connected to {server_addr}"),
+                        game_pid,
+                        Some(rpc_start),
+                    );
                 }
                 _ = rpc_rx.recv() => break,
             }
@@ -597,7 +677,7 @@ pub async fn launch_game(app: AppHandle, req: LaunchRequest) -> Result<(), Strin
     });
 
     let log_file_path = game_dir.join("launcher-game.log");
-    let log_file = std::sync::Arc::new(std::sync::Mutex::new(
+    let log_file = Arc::new(std::sync::Mutex::new(
         std::fs::File::create(&log_file_path).ok(),
     ));
 
@@ -645,17 +725,28 @@ pub async fn launch_game(app: AppHandle, req: LaunchRequest) -> Result<(), Strin
     let inst_id = req.instance_id.clone();
     let last_saved_for_exit = last_saved_instant.clone();
     tokio::spawn(async move {
+        // Hold instance_guard until the JVM process exits so a second launch cannot start concurrently
+        let _keep_guard = instance_guard;
         let code = child.wait().await.ok().and_then(|s| s.code()).unwrap_or(-1);
         let _ = rpc_tx.send(()).await;
         let remainder = last_saved_for_exit
             .lock()
             .ok()
-            .map(|g| g.elapsed().as_secs())
+            .map(|mut g| {
+                let d = g.elapsed().as_secs();
+                *g = Instant::now();
+                d
+            })
             .unwrap_or(0);
-        let final_state = crate::sync::add_playtime_delta(&inst_id, remainder);
-        let _ = app_wait.emit("playtime-updated", (&inst_id, &final_state));
+        let inst_for_final = inst_id.clone();
+        if let Ok(final_state) = tokio::task::spawn_blocking(move || {
+            crate::sync::add_playtime_delta(&inst_for_final, remainder)
+        })
+        .await
+        {
+            let _ = app_wait.emit("playtime-updated", (&inst_id, &final_state));
+        }
         crate::community::update_discord_rpc("In PETABLOCKS Launcher", "Ready to Play");
-        // Always restore the launcher window when game terminates
         if let Some(main_win) = app_wait.get_webview_window("main") {
             let _ = main_win.show();
             let _ = main_win.unminimize();

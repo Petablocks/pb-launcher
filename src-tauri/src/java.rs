@@ -1,15 +1,12 @@
-use reqwest::Client;
-use sha2::Digest;
 use serde::Serialize;
 use std::fs::{self, File};
 use std::io;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::time::Duration;
 use tauri::{AppHandle, Emitter};
 
 use crate::settings::load_settings;
-use crate::sync::launcher_root;
+use crate::sync::{download_to, http_client, launcher_root, ExpectedHash};
 
 /// Release metadata (download link + SHA-256) for the latest Temurin 21 Windows x64 JRE.
 const ADOPTIUM_WINDOWS_X64_JRE21_META: &str =
@@ -37,13 +34,51 @@ const CREATE_NO_WINDOW: u32 = 0x08000000;
 /// `javaw.exe` is the GUI-subsystem binary and may print nothing for `-version` or when its
 /// stdio is piped, so use the sibling `java.exe` (with CREATE_NO_WINDOW) for probing and launching.
 pub fn cli_java(java_exe: &Path) -> PathBuf {
-    if java_exe.file_name().is_some_and(|n| n.eq_ignore_ascii_case("javaw.exe")) {
+    if java_exe
+        .file_name()
+        .is_some_and(|n| n.eq_ignore_ascii_case("javaw.exe"))
+    {
         let sibling = java_exe.with_file_name("java.exe");
         if sibling.exists() {
             return sibling;
         }
     }
     java_exe.to_path_buf()
+}
+
+/// Parses the major Java version number from `java -version` output (handles `"21"`, `"21.0.5"`,
+/// `"22.0.1"`, `"23"`, `"1.8.0_412"`, etc.).
+pub fn parse_java_major(output: &str) -> Option<u32> {
+    // 1. Check quoted version string first, e.g. `openjdk version "21.0.5"` or `java version "21"`
+    if let Some(first_quote) = output.find('"') {
+        let rest = &output[first_quote + 1..];
+        if let Some(end_quote) = rest.find('"') {
+            let ver_token = &rest[..end_quote];
+            if let Some(major) = extract_major_from_token(ver_token) {
+                return Some(major);
+            }
+        }
+    }
+    // 2. Fallback: scan whitespace tokens after `version` or `openjdk`
+    for word in output.split_whitespace() {
+        let clean = word.trim_matches('"');
+        if clean.chars().next().is_some_and(|c| c.is_ascii_digit()) {
+            if let Some(major) = extract_major_from_token(clean) {
+                return Some(major);
+            }
+        }
+    }
+    None
+}
+
+fn extract_major_from_token(token: &str) -> Option<u32> {
+    let mut parts = token.split(['.', '-', '_', '+']);
+    let first = parts.next()?.parse::<u32>().ok()?;
+    if first == 1 {
+        parts.next()?.parse::<u32>().ok()
+    } else {
+        Some(first)
+    }
 }
 
 fn probe_java(java_exe: &Path) -> Option<String> {
@@ -60,8 +95,8 @@ fn probe_java(java_exe: &Path) -> Option<String> {
     let stdout = String::from_utf8_lossy(&out.stdout);
     let combined = format!("{stderr}\n{stdout}");
     let first_line = combined.lines().next()?.to_string();
-    // Require Java 21+
-    if combined.contains("\"21.") || combined.contains("\"22.") || combined.contains(" 21.") {
+    // Require Java 21+ (supports GA "21", "21.0.x", 22, 23, etc.)
+    if parse_java_major(&combined).is_some_and(|major| major >= 21) {
         Some(first_line)
     } else {
         None
@@ -69,7 +104,6 @@ fn probe_java(java_exe: &Path) -> Option<String> {
 }
 
 fn find_java_in_dir(dir: &Path) -> Option<PathBuf> {
-    // Prefer javaw.exe on Windows to prevent console window from opening
     #[cfg(windows)]
     let preferred = "javaw.exe";
     #[cfg(not(windows))]
@@ -128,16 +162,38 @@ pub fn detect_java() -> JavaStatus {
         }
     }
 
-    // 3. Check JAVA_HOME & standard Windows Adoptium / Oracle / Microsoft JDK paths
+    // 3. Check JAVA_HOME & standard Windows ProgramFiles directories dynamically
     let mut candidates: Vec<PathBuf> = Vec::new();
     if let Ok(jh) = std::env::var("JAVA_HOME") {
-        candidates.push(PathBuf::from(jh));
+        if !jh.trim().is_empty() {
+            candidates.push(PathBuf::from(jh));
+        }
     }
-    candidates.push(PathBuf::from(r"C:\Program Files\Eclipse Adoptium"));
-    candidates.push(PathBuf::from(r"C:\Program Files\Java"));
-    candidates.push(PathBuf::from(r"C:\Program Files\Microsoft"));
-    candidates.push(PathBuf::from(r"C:\Program Files\BellSoft"));
-    candidates.push(PathBuf::from(r"C:\Program Files\Zulu"));
+
+    let mut prog_dirs = Vec::new();
+    for env_key in ["ProgramW6432", "ProgramFiles"] {
+        if let Ok(val) = std::env::var(env_key) {
+            let pb = PathBuf::from(val);
+            if !prog_dirs.contains(&pb) {
+                prog_dirs.push(pb);
+            }
+        }
+    }
+    if prog_dirs.is_empty() {
+        prog_dirs.push(PathBuf::from(r"C:\Program Files"));
+    }
+
+    for prog in prog_dirs {
+        for vendor in [
+            "Eclipse Adoptium",
+            "Java",
+            "Microsoft",
+            "BellSoft",
+            "Zulu",
+        ] {
+            candidates.push(prog.join(vendor));
+        }
+    }
 
     for base in candidates {
         if let Some(exe) = find_java_in_dir(&base) {
@@ -161,7 +217,9 @@ pub fn detect_java() -> JavaStatus {
 }
 
 pub async fn ensure_java_21(app: &AppHandle) -> Result<PathBuf, String> {
-    let status = detect_java();
+    let status = tokio::task::spawn_blocking(detect_java)
+        .await
+        .map_err(|e| e.to_string())?;
     if status.found {
         if let Some(p) = status.path {
             return Ok(PathBuf::from(p));
@@ -173,12 +231,7 @@ pub async fn ensure_java_21(app: &AppHandle) -> Result<PathBuf, String> {
         "Downloading Adoptium OpenJDK 21 runtime (first-time setup)...",
     );
 
-    let client = Client::builder()
-        .user_agent(concat!("PETABLOCKS-Launcher/", env!("CARGO_PKG_VERSION")))
-        .timeout(Duration::from_secs(300))
-        .build()
-        .map_err(|e| e.to_string())?;
-
+    let client = http_client();
     let meta: serde_json::Value = client
         .get(ADOPTIUM_WINDOWS_X64_JRE21_META)
         .send()
@@ -189,51 +242,82 @@ pub async fn ensure_java_21(app: &AppHandle) -> Result<PathBuf, String> {
         .await
         .map_err(|e| format!("Invalid Adoptium response: {e}"))?;
     let pkg = &meta[0]["binary"]["package"];
-    let link = pkg["link"].as_str().ok_or("Adoptium response had no download link")?;
-    let checksum = pkg["checksum"].as_str().ok_or("Adoptium response had no checksum")?;
+    let link = pkg["link"]
+        .as_str()
+        .ok_or("Adoptium response had no download link")?;
+    let checksum = pkg["checksum"]
+        .as_str()
+        .ok_or("Adoptium response had no checksum")?;
     if !link.starts_with("https://") {
         return Err("Adoptium download link is not HTTPS.".into());
     }
 
-    let bytes = client
-        .get(link)
-        .send()
+    let zip_dest = launcher_root().join("cache").join("adoptium-jre21-x64.zip");
+    download_to(client, link, &zip_dest, ExpectedHash::Sha256(checksum))
         .await
-        .and_then(|r| r.error_for_status())
-        .map_err(|e| format!("Failed to download Java 21: {e}"))?
-        .bytes()
-        .await
-        .map_err(|e| format!("Failed reading Java 21 archive: {e}"))?;
-
-    let got = hex::encode(sha2::Sha256::digest(&bytes));
-    if !got.eq_ignore_ascii_case(checksum) {
-        return Err(format!("Java 21 download failed SHA-256 verification (expected {checksum}, got {got})."));
-    }
-
-    let target_dir = managed_runtime_dir();
-    let _ = fs::remove_dir_all(&target_dir);
-    fs::create_dir_all(&target_dir).map_err(|e| e.to_string())?;
+        .map_err(|e| format!("Failed to download or verify Java 21 runtime: {e}"))?;
 
     let _ = app.emit("launch-status", "Extracting OpenJDK 21 runtime...");
 
-    let reader = io::Cursor::new(bytes.to_vec());
-    let mut archive = zip::ZipArchive::new(reader).map_err(|e| e.to_string())?;
-    for i in 0..archive.len() {
-        let mut entry = archive.by_index(i).map_err(|e| e.to_string())?;
-        let Some(rel) = entry.enclosed_name().map(|p| p.to_path_buf()) else {
-            continue;
-        };
-        let out_path = target_dir.join(rel);
-        if entry.is_dir() {
-            let _ = fs::create_dir_all(&out_path);
-        } else {
-            if let Some(p) = out_path.parent() {
-                let _ = fs::create_dir_all(p);
-            }
-            let mut out_file = File::create(&out_path).map_err(|e| e.to_string())?;
-            io::copy(&mut entry, &mut out_file).map_err(|e| e.to_string())?;
-        }
-    }
+    let zip_for_extract = zip_dest.clone();
+    let extracted_exe = tokio::task::spawn_blocking(move || {
+        let target_dir = managed_runtime_dir();
+        let _ = fs::remove_dir_all(&target_dir);
+        fs::create_dir_all(&target_dir).map_err(|e| e.to_string())?;
 
-    find_java_in_dir(&target_dir).ok_or_else(|| "Extracted Java 21 archive but java.exe was not found.".into())
+        let file = File::open(&zip_for_extract).map_err(|e| e.to_string())?;
+        let mut archive = zip::ZipArchive::new(file).map_err(|e| e.to_string())?;
+        for i in 0..archive.len() {
+            let mut entry = archive.by_index(i).map_err(|e| e.to_string())?;
+            let Some(rel) = entry.enclosed_name().map(|p| p.to_path_buf()) else {
+                continue;
+            };
+            let out_path = target_dir.join(rel);
+            if entry.is_dir() {
+                let _ = fs::create_dir_all(&out_path);
+            } else {
+                if let Some(p) = out_path.parent() {
+                    let _ = fs::create_dir_all(p);
+                }
+                let mut out_file = File::create(&out_path).map_err(|e| e.to_string())?;
+                io::copy(&mut entry, &mut out_file).map_err(|e| e.to_string())?;
+            }
+        }
+        let _ = fs::remove_file(&zip_for_extract);
+        find_java_in_dir(&target_dir)
+            .ok_or_else(|| "Extracted Java 21 archive but java.exe was not found.".to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())??;
+
+    Ok(extracted_exe)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_java_major_versions() {
+        assert_eq!(
+            parse_java_major("openjdk version \"21\" 2023-09-19"),
+            Some(21)
+        );
+        assert_eq!(
+            parse_java_major("openjdk version \"21.0.5\" 2024-10-15 LTS"),
+            Some(21)
+        );
+        assert_eq!(
+            parse_java_major("openjdk version \"23.0.1\" 2024-10-15"),
+            Some(23)
+        );
+        assert_eq!(
+            parse_java_major("java version \"1.8.0_412\""),
+            Some(8)
+        );
+        assert_eq!(
+            parse_java_major("openjdk 21.0.4 2024-07-16"),
+            Some(21)
+        );
+    }
 }

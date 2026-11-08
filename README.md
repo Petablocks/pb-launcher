@@ -1,6 +1,6 @@
 # PETABLOCKS Launcher
 
-**Version**: `v1.10.1` - Official Minecraft launcher for the [PETABLOCKS](https://petablocks.com) network.
+**Version**: `v1.11.0` - Official Minecraft launcher for the [PETABLOCKS](https://petablocks.com) network.
 
 Built with Tauri v2 (Rust) + React 19 + TypeScript + Tailwind CSS v4, using the official `petablocks-brand` design tokens.
 
@@ -33,4 +33,4 @@ npm run tauri build   # build the Windows installer
 
 
 ## Microsoft sign-in
-Uses the Microsoft device code flow (Xbox Live, XSTS, Minecraft services) powered by the official Mojang-approved PETABLOCKS Azure Application (`acbc8721-204e-4445-8c3f-962fa445d718`). The refresh token and user profile are persisted securely in the Windows Credential Manager (OS Keyring), while the Minecraft Services session token is cached on disk in `session-cache.json` with rate-limit protection (`TOO_MANY_REQUESTS` resilience) and offline fallback mode.
+Uses the Microsoft device code flow (Xbox Live, XSTS, Minecraft services) powered by the official Mojang-approved PETABLOCKS Azure Application (`acbc8721-204e-4445-8c3f-962fa445d718`). The refresh token and user profile are persisted securely in the Windows Credential Manager (OS Keyring), while the Minecraft Services session token is kept in Rust memory and cached on disk encrypted with Windows DPAPI (`session-cache.dpapi`) with rate-limit protection (`TOO_MANY_REQUESTS` resilience) and offline fallback mode.

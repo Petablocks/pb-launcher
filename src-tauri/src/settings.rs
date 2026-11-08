@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
 
-use crate::sync::launcher_root;
+use crate::sync::{atomic_write, launcher_root, log_event, STATE_LOCK};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -53,15 +53,28 @@ fn settings_path() -> PathBuf {
 }
 
 pub fn load_settings() -> LauncherSettings {
-    fs::read_to_string(settings_path())
-        .ok()
-        .and_then(|s| serde_json::from_str(&s).ok())
-        .unwrap_or_default()
+    let _guard = STATE_LOCK.lock().ok();
+    let p = settings_path();
+    let Ok(raw) = fs::read_to_string(&p) else {
+        return LauncherSettings::default();
+    };
+    match serde_json::from_str::<LauncherSettings>(&raw) {
+        Ok(s) => s,
+        Err(e) => {
+            log_event(
+                "WARN",
+                &format!("Corrupt settings.json: {e}; backing up to settings.json.corrupt."),
+            );
+            let _ = fs::copy(&p, p.with_extension("json.corrupt"));
+            LauncherSettings::default()
+        }
+    }
 }
 
 pub fn save_settings(settings: &LauncherSettings) -> Result<(), String> {
-    let root = launcher_root();
-    fs::create_dir_all(&root).map_err(|e| e.to_string())?;
+    let _guard = STATE_LOCK
+        .lock()
+        .map_err(|_| "Settings lock poisoned".to_string())?;
     let json = serde_json::to_string_pretty(settings).map_err(|e| e.to_string())?;
-    fs::write(settings_path(), json).map_err(|e| e.to_string())
+    atomic_write(&settings_path(), json.as_bytes())
 }

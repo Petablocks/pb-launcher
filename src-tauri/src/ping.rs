@@ -5,6 +5,8 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tokio::time::timeout;
 
+use crate::sync::http_client;
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PlayerSample {
@@ -22,6 +24,50 @@ pub struct ServerStatus {
     pub player_sample: Vec<PlayerSample>,
     pub version_name: Option<String>,
     pub motd: Option<String>,
+}
+
+fn offline_status() -> ServerStatus {
+    ServerStatus {
+        online: false,
+        latency_ms: None,
+        online_players: 0,
+        max_players: 0,
+        player_sample: Vec::new(),
+        version_name: None,
+        motd: None,
+    }
+}
+
+/// Restricts SLP pinging strictly to `petablocks.com` and `*.petablocks.com` so the WebView cannot
+/// use the launcher backend as an arbitrary LAN/WAN port scanner.
+pub fn is_allowed_server_host(host: &str) -> bool {
+    let h = host.trim().trim_end_matches('.').to_ascii_lowercase();
+    if h.is_empty()
+        || !h
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-')
+    {
+        return false;
+    }
+    h == "petablocks.com" || h.ends_with(".petablocks.com")
+}
+
+/// Parses `host[:port]` or `[ipv6]:port` cleanly using `rsplit_once(':')`.
+pub fn parse_host_port(address: &str) -> (String, u16) {
+    let trimmed = address.trim();
+    if let Some(rest) = trimmed.strip_prefix('[') {
+        if let Some((ipv6, after)) = rest.split_once(']') {
+            let port = after
+                .strip_prefix(':')
+                .and_then(|p| p.parse::<u16>().ok())
+                .unwrap_or(25565);
+            return (ipv6.to_string(), port);
+        }
+    }
+    match trimmed.rsplit_once(':') {
+        Some((h, p)) if !h.contains(':') => (h.to_string(), p.parse::<u16>().unwrap_or(25565)),
+        _ => (trimmed.to_string(), 25565),
+    }
 }
 
 fn push_varint(buf: &mut Vec<u8>, mut val: i32) {
@@ -94,39 +140,36 @@ fn extract_motd(desc: &Value) -> Option<String> {
 }
 
 async fn resolve_minecraft_target(host: &str, port: u16) -> (String, u16) {
-    // If port was explicitly specified (not default 25565), don't do SRV lookup
-    if port != 25565 {
+    if port != 25565 || !is_allowed_server_host(host) {
         return (host.to_string(), port);
     }
 
-    // Try resolving SRV record via Cloudflare DoH (_minecraft._tcp.<host>)
+    // Resolve SRV record for verified *.petablocks.com domains
     let srv_name = format!("_minecraft._tcp.{}", host.trim_end_matches('.'));
     let doh_url = format!(
         "https://cloudflare-dns.com/dns-query?name={}&type=SRV",
         srv_name
     );
 
-    let client = reqwest::Client::builder()
-        .timeout(Duration::from_millis(1500))
-        .build();
-
-    if let Ok(client) = client {
-        if let Ok(resp) = client
+    if let Ok(Ok(resp)) = timeout(
+        Duration::from_millis(1500),
+        http_client()
             .get(&doh_url)
             .header("accept", "application/dns-json")
-            .send()
-            .await
-        {
-            if let Ok(json) = resp.json::<Value>().await {
-                if let Some(answers) = json["Answer"].as_array() {
-                    for ans in answers {
-                        if ans["type"].as_u64() == Some(33) {
-                            if let Some(data) = ans["data"].as_str() {
-                                // Data format: "priority weight port target" e.g. "0 5 11677 rh.petablocks.com"
-                                let parts: Vec<&str> = data.split_whitespace().collect();
-                                if parts.len() >= 4 {
-                                    if let Ok(resolved_port) = parts[2].parse::<u16>() {
-                                        let resolved_host = parts[3].trim_end_matches('.').to_string();
+            .send(),
+    )
+    .await
+    {
+        if let Ok(json) = resp.json::<Value>().await {
+            if let Some(answers) = json["Answer"].as_array() {
+                for ans in answers {
+                    if ans["type"].as_u64() == Some(33) {
+                        if let Some(data) = ans["data"].as_str() {
+                            let parts: Vec<&str> = data.split_whitespace().collect();
+                            if parts.len() >= 4 {
+                                if let Ok(resolved_port) = parts[2].parse::<u16>() {
+                                    let resolved_host = parts[3].trim_end_matches('.').to_string();
+                                    if is_allowed_server_host(&resolved_host) {
                                         return (resolved_host, resolved_port);
                                     }
                                 }
@@ -142,35 +185,35 @@ async fn resolve_minecraft_target(host: &str, port: u16) -> (String, u16) {
 }
 
 pub async fn ping_server(address: &str) -> ServerStatus {
-    let (input_host, input_port) = match address.split_once(':') {
-        Some((h, p)) => (h, p.parse::<u16>().unwrap_or(25565)),
-        None => (address, 25565),
-    };
+    let (input_host, input_port) = parse_host_port(address);
+    if !is_allowed_server_host(&input_host) {
+        return offline_status();
+    }
 
-    let (host, port) = resolve_minecraft_target(input_host, input_port).await;
+    let (host, port) = resolve_minecraft_target(&input_host, input_port).await;
 
     let target = format!("{host}:{port}");
     let start = Instant::now();
 
     let res = timeout(Duration::from_secs(4), async {
-        let mut stream = TcpStream::connect(&target).await.map_err(|e| e.to_string())?;
+        let mut stream = TcpStream::connect(&target)
+            .await
+            .map_err(|e| e.to_string())?;
         let latency = start.elapsed().as_millis() as u64;
 
-        // Build Handshake packet (Packet ID 0x00)
         let mut handshake_data = Vec::new();
-        push_varint(&mut handshake_data, 0x00); // Packet ID
-        push_varint(&mut handshake_data, 767); // Protocol version (1.21.1 = 767)
+        push_varint(&mut handshake_data, 0x00);
+        push_varint(&mut handshake_data, 767);
         let host_bytes = host.as_bytes();
         push_varint(&mut handshake_data, host_bytes.len() as i32);
         handshake_data.extend_from_slice(host_bytes);
         handshake_data.extend_from_slice(&port.to_be_bytes());
-        push_varint(&mut handshake_data, 1); // Next state = 1 (status)
+        push_varint(&mut handshake_data, 1);
 
         let mut packet = Vec::new();
         push_varint(&mut packet, handshake_data.len() as i32);
         packet.extend_from_slice(&handshake_data);
 
-        // Status Request packet (length 1, packet ID 0x00)
         packet.push(0x01);
         packet.push(0x00);
 
@@ -187,7 +230,10 @@ pub async fn ping_server(address: &str) -> ServerStatus {
             return Err("SLP response too large".into());
         }
         let mut json_buf = vec![0u8; json_len];
-        stream.read_exact(&mut json_buf).await.map_err(|e| e.to_string())?;
+        stream
+            .read_exact(&mut json_buf)
+            .await
+            .map_err(|e| e.to_string())?;
 
         let val: Value = serde_json::from_slice(&json_buf).map_err(|e| e.to_string())?;
         let online_players = val["players"]["online"].as_u64().unwrap_or(0) as u32;
@@ -220,15 +266,7 @@ pub async fn ping_server(address: &str) -> ServerStatus {
 
     match res {
         Ok(Ok(status)) => status,
-        _ => ServerStatus {
-            online: false,
-            latency_ms: None,
-            online_players: 0,
-            max_players: 0,
-            player_sample: Vec::new(),
-            version_name: None,
-            motd: None,
-        },
+        _ => offline_status(),
     }
 }
 
@@ -249,5 +287,21 @@ mod tests {
     #[test]
     fn strips_formatting() {
         assert_eq!(strip_mc_formatting("§aHello §lWorld"), "Hello World");
+    }
+
+    #[test]
+    fn host_allowlist_and_parsing() {
+        assert!(is_allowed_server_host("s2.petablocks.com"));
+        assert!(is_allowed_server_host("petablocks.com"));
+        assert!(!is_allowed_server_host("127.0.0.1"));
+        assert!(!is_allowed_server_host("evil.com"));
+        assert_eq!(
+            parse_host_port("s2.petablocks.com:25566"),
+            ("s2.petablocks.com".to_string(), 25566)
+        );
+        assert_eq!(
+            parse_host_port("[::1]:25565"),
+            ("::1".to_string(), 25565)
+        );
     }
 }
