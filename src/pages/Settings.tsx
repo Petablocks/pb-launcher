@@ -9,7 +9,6 @@ import {
   Save,
   Server,
 } from "lucide-react";
-import { openPath } from "@tauri-apps/plugin-opener";
 import { invoke } from "@tauri-apps/api/core";
 import { INSTANCES } from "../instances";
 import {
@@ -122,9 +121,9 @@ export default function Settings() {
   }
 
   async function handleOpenInstanceFolder() {
+    setError(null);
     try {
-      const dir = await getInstanceDir(instance.id);
-      await openPath(dir);
+      await getInstanceDir(instance.id);
     } catch (e) {
       setError(String(e));
     }

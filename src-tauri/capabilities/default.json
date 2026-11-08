@@ -31,8 +31,10 @@
     {
       "identifier": "opener:allow-open-path",
       "allow": [
-        { "path": "$LOCALAPPDATA/PETABLOCKS Launcher/**" },
-        { "path": "$APPDATA/PETABLOCKS Launcher/**" }
+        { "path": "$LOCALDATA/PETABLOCKS Launcher" },
+        { "path": "$LOCALDATA/PETABLOCKS Launcher/**" },
+        { "path": "$DATA/PETABLOCKS Launcher" },
+        { "path": "$DATA/PETABLOCKS Launcher/**" }
       ]
     }
   ]

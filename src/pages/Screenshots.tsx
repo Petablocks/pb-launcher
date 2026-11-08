@@ -1,9 +1,13 @@
 import { useEffect, useState } from "react";
 import { FolderOpen, Image as ImageIcon, Loader2, RefreshCw } from "lucide-react";
-import { openPath } from "@tauri-apps/plugin-opener";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { INSTANCES } from "../instances";
-import { ScreenshotItem, getScreenshotsDir, listScreenshots } from "../community";
+import {
+  ScreenshotItem,
+  getScreenshotsDir,
+  listScreenshots,
+  openScreenshotFile,
+} from "../community";
 import { formatBytes } from "../sync";
 import { inTauri } from "../auth";
 
@@ -36,9 +40,9 @@ export default function Screenshots() {
   }, []);
 
   async function openFolder() {
+    setError(null);
     try {
-      const dir = await getScreenshotsDir(instance.id);
-      await openPath(dir);
+      await getScreenshotsDir(instance.id);
     } catch (e) {
       setError(String(e));
     }
@@ -104,7 +108,7 @@ export default function Screenshots() {
                   <span className="ml-3 text-pb-muted">{formatBytes(selected.size)}</span>
                 </div>
                 <button
-                  onClick={() => openPath(selected.path).catch(() => {})}
+                  onClick={() => openScreenshotFile(instance.id, selected.filename).catch(() => {})}
                   className="text-pb-cyan hover:underline"
                 >
                   Open File

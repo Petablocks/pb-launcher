@@ -3,6 +3,15 @@
 All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.11.1] - 2026-11-08
+### Fixed
+- **Shaders, Resource Packs, Screenshots & Instance Folder Opening**:
+  - Fixed an issue where clicking **Open `shaderpacks`**, **Open `resourcepacks`**, **Open Screenshots Folder**, **Open Custom Mods Folder**, or **Open Instance Folder** showed a path permission error after migrating to Local AppData.
+  - Enabled native Explorer folder and screenshot file opening directly from the launcher backend.
+- **Shaderpacks & Screenshots Data Migration**:
+  - Improved the Local AppData migration to automatically merge any remaining files, screenshots, or shaderpacks from Roaming AppData if both folders existed during an update.
+  - Automatically restores bundled shaderpacks and configs during sync if the `shaderpacks` folder is empty.
+
 ## [1.11.0] - 2026-11-08
 ### Added
 - **Streaming Downloader & Slow-Connection Resilience**:

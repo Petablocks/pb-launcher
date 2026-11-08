@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { Boxes, CheckCircle2, FolderOpen, Loader2, RefreshCw, Search, ShieldCheck } from "lucide-react";
-import { openPath } from "@tauri-apps/plugin-opener";
 import { INSTANCES } from "../instances";
 import {
   CustomModFile,
@@ -59,9 +58,9 @@ export default function Mods() {
   }
 
   async function openCustomFolder() {
+    setError(null);
     try {
-      const dir = await getCustomModsDir(instance.id);
-      await openPath(dir);
+      await getCustomModsDir(instance.id);
     } catch (e) {
       setError(String(e));
     }

@@ -401,6 +401,8 @@ pub fn launcher_root() -> PathBuf {
 }
 
 /// One-time migration from `%APPDATA%\PETABLOCKS Launcher` (Roaming) to `%LOCALAPPDATA%\PETABLOCKS Launcher`.
+/// Also merges any missing files/directories if both folders exist (for example if the launcher was
+/// updated while running and Roaming could not be renamed atomically).
 pub fn migrate_roaming_to_local() {
     let Some(local_base) = dirs::data_local_dir() else {
         return;
@@ -413,18 +415,56 @@ pub fn migrate_roaming_to_local() {
     }
     let local_dir = local_base.join("PETABLOCKS Launcher");
     let roaming_dir = roaming_base.join("PETABLOCKS Launcher");
-    if local_dir.exists() || !roaming_dir.exists() {
+    if !roaming_dir.exists() {
         return;
     }
     if let Some(parent) = local_dir.parent() {
         let _ = fs::create_dir_all(parent);
     }
-    if fs::rename(&roaming_dir, &local_dir).is_ok() {
+    if !local_dir.exists() && fs::rename(&roaming_dir, &local_dir).is_ok() {
         log_event(
             "INFO",
             "Migrated launcher data root from Roaming AppData to LocalAppData.",
         );
+        return;
     }
+
+    // Fallback: merge any missing files/folders from Roaming into LocalAppData
+    let mut moved_any = false;
+    merge_dir_into(&roaming_dir, &local_dir, &mut moved_any);
+    if moved_any {
+        log_event(
+            "INFO",
+            "Merged remaining launcher data from Roaming AppData into LocalAppData.",
+        );
+    }
+}
+
+fn merge_dir_into(src: &Path, dst: &Path, moved_any: &mut bool) {
+    let Ok(entries) = fs::read_dir(src) else {
+        return;
+    };
+    let _ = fs::create_dir_all(dst);
+    for entry in entries.flatten() {
+        let src_path = entry.path();
+        let dst_path = dst.join(entry.file_name());
+        if src_path.is_dir() {
+            if !dst_path.exists() && fs::rename(&src_path, &dst_path).is_ok() {
+                *moved_any = true;
+                continue;
+            }
+            merge_dir_into(&src_path, &dst_path, moved_any);
+            let _ = fs::remove_dir(&src_path);
+        } else if !dst_path.exists() {
+            if fs::rename(&src_path, &dst_path).is_ok() {
+                *moved_any = true;
+            } else if fs::copy(&src_path, &dst_path).is_ok() {
+                let _ = fs::remove_file(&src_path);
+                *moved_any = true;
+            }
+        }
+    }
+    let _ = fs::remove_dir(src);
 }
 
 /// Reject anything that could escape the instances folder (ids/filenames come from the webview).
@@ -1014,9 +1054,16 @@ pub async fn sync_instance(
         }
     }
 
-    // 3. Apply overrides from .mrpack if version changed
+    // 3. Apply overrides from .mrpack if version changed or if shaderpacks/options are missing
     let mut overrides_ok = true;
-    if state_snapshot.installed_version.as_deref() != Some(&manifest.version) {
+    let shaderpacks_dir = base_dir.join("shaderpacks");
+    let has_shaderpacks = fs::read_dir(&shaderpacks_dir)
+        .map(|mut d| d.any(|e| e.is_ok()))
+        .unwrap_or(false);
+    let needs_overrides = state_snapshot.installed_version.as_deref() != Some(&manifest.version)
+        || !has_shaderpacks
+        || !base_dir.join("options.txt").exists();
+    if needs_overrides {
         emit("overrides", 0, 1, "Applying modpack configs & overrides...");
         if let Err(e) = apply_mrpack_overrides(&instance_id, &base_dir, &manifest).await {
             overrides_ok = false;
@@ -1272,5 +1319,36 @@ mod tests {
         assert!(validate_version_token("nf", "21.1.259").is_ok());
         assert!(validate_version_token("mc", "../1.21.1").is_err());
         assert!(validate_version_token("mc", "1.21.1\\..\\evil").is_err());
+    }
+
+    #[test]
+    fn merges_roaming_into_existing_local() {
+        let base = std::env::temp_dir().join(format!("pb_merge_test_{}", std::process::id()));
+        let _ = fs::remove_dir_all(&base);
+        let src = base.join("roaming");
+        let dst = base.join("local");
+        fs::create_dir_all(src.join("instances").join("petablocks-s2").join("shaderpacks")).unwrap();
+        fs::write(
+            src.join("instances")
+                .join("petablocks-s2")
+                .join("shaderpacks")
+                .join("ComplementaryReimagined.zip"),
+            b"shader",
+        )
+        .unwrap();
+        fs::create_dir_all(dst.join("instances").join("petablocks-s2")).unwrap();
+        fs::write(dst.join("launcher.log"), b"log").unwrap();
+
+        let mut moved = false;
+        merge_dir_into(&src, &dst, &mut moved);
+        assert!(moved);
+        assert!(dst
+            .join("instances")
+            .join("petablocks-s2")
+            .join("shaderpacks")
+            .join("ComplementaryReimagined.zip")
+            .is_file());
+        assert!(dst.join("launcher.log").is_file());
+        let _ = fs::remove_dir_all(&base);
     }
 }

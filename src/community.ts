@@ -48,6 +48,9 @@ export const listScreenshots = (instanceId: string): Promise<ScreenshotItem[]> =
 export const getScreenshotsDir = (instanceId: string): Promise<string> =>
   invoke<string>("screenshots_dir", { instanceId });
 
+export const openScreenshotFile = (instanceId: string, filename: string): Promise<void> =>
+  invoke<void>("screenshot_open_file", { instanceId, filename });
+
 export const getLatestCrashReport = (instanceId: string): Promise<CrashReportInfo | null> =>
   inTauri ? invoke<CrashReportInfo | null>("crash_latest", { instanceId }) : Promise.resolve(null);
 

@@ -7,7 +7,6 @@ import {
   Sparkles,
   Sun,
 } from "lucide-react";
-import { openPath } from "@tauri-apps/plugin-opener";
 import { INSTANCES } from "../instances";
 import {
   PackEntry,
@@ -62,9 +61,9 @@ export default function Packs() {
   }
 
   async function handleOpenFolder(kind: "shader" | "resourcepack") {
+    setError(null);
     try {
-      const dir = await openPacksDir(instance.id, kind);
-      await openPath(dir);
+      await openPacksDir(instance.id, kind);
     } catch (e) {
       setError(String(e));
     }

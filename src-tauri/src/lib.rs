@@ -18,6 +18,7 @@ use ping::ServerStatus;
 use settings::LauncherSettings;
 use sync::{CustomModFile, InstanceState, LauncherManifest, PackEntry};
 use tauri::{AppHandle, Emitter, Manager, WindowEvent};
+use tauri_plugin_opener::OpenerExt;
 use updater::LauncherUpdateInfo;
 
 #[tauri::command]
@@ -94,10 +95,14 @@ async fn sync_list_custom_mods(instance_id: String) -> Result<Vec<CustomModFile>
 }
 
 #[tauri::command]
-async fn sync_custom_mods_dir(instance_id: String) -> Result<String, String> {
-    tokio::task::spawn_blocking(move || sync::open_custom_mods_dir(&instance_id))
+async fn sync_custom_mods_dir(app: AppHandle, instance_id: String) -> Result<String, String> {
+    let dir = tokio::task::spawn_blocking(move || sync::open_custom_mods_dir(&instance_id))
         .await
-        .map_err(|e| e.to_string())?
+        .map_err(|e| e.to_string())??;
+    app.opener()
+        .open_path(&dir, None::<&str>)
+        .map_err(|e| e.to_string())?;
+    Ok(dir)
 }
 
 #[tauri::command]
@@ -135,10 +140,18 @@ async fn packs_set_active_shader(
 }
 
 #[tauri::command]
-async fn packs_open_dir(instance_id: String, kind: String) -> Result<String, String> {
-    tokio::task::spawn_blocking(move || sync::open_packs_dir(&instance_id, &kind))
+async fn packs_open_dir(
+    app: AppHandle,
+    instance_id: String,
+    kind: String,
+) -> Result<String, String> {
+    let dir = tokio::task::spawn_blocking(move || sync::open_packs_dir(&instance_id, &kind))
         .await
-        .map_err(|e| e.to_string())?
+        .map_err(|e| e.to_string())??;
+    app.opener()
+        .open_path(&dir, None::<&str>)
+        .map_err(|e| e.to_string())?;
+    Ok(dir)
 }
 
 #[tauri::command]
@@ -183,14 +196,18 @@ async fn launch_instance(app: AppHandle, req: LaunchRequest) -> Result<(), Strin
 }
 
 #[tauri::command]
-async fn open_instance_dir(instance_id: String) -> Result<String, String> {
-    tokio::task::spawn_blocking(move || {
+async fn open_instance_dir(app: AppHandle, instance_id: String) -> Result<String, String> {
+    let dir = tokio::task::spawn_blocking(move || {
         let dir = sync::instance_dir(&instance_id);
         std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-        Ok(dir.to_string_lossy().to_string())
+        Ok::<String, String>(dir.to_string_lossy().to_string())
     })
     .await
-    .map_err(|e| e.to_string())?
+    .map_err(|e| e.to_string())??;
+    app.opener()
+        .open_path(&dir, None::<&str>)
+        .map_err(|e| e.to_string())?;
+    Ok(dir)
 }
 
 #[tauri::command]
@@ -199,17 +216,48 @@ async fn server_ping(address: String) -> ServerStatus {
 }
 
 #[tauri::command]
-async fn screenshots_list(instance_id: String) -> Result<Vec<ScreenshotItem>, String> {
-    tokio::task::spawn_blocking(move || community::list_screenshots(&instance_id))
+async fn screenshots_list(
+    app: AppHandle,
+    instance_id: String,
+) -> Result<Vec<ScreenshotItem>, String> {
+    let inst_for_scope = instance_id.clone();
+    let list = tokio::task::spawn_blocking(move || community::list_screenshots(&instance_id))
         .await
-        .map_err(|e| e.to_string())?
+        .map_err(|e| e.to_string())??;
+    let shots_dir = sync::instance_dir(&inst_for_scope).join("screenshots");
+    let _ = app.asset_protocol_scope().allow_directory(&shots_dir, false);
+    Ok(list)
 }
 
 #[tauri::command]
-async fn screenshots_dir(instance_id: String) -> Result<String, String> {
-    tokio::task::spawn_blocking(move || community::screenshots_dir(&instance_id))
+async fn screenshots_dir(app: AppHandle, instance_id: String) -> Result<String, String> {
+    let dir = tokio::task::spawn_blocking(move || community::screenshots_dir(&instance_id))
         .await
-        .map_err(|e| e.to_string())?
+        .map_err(|e| e.to_string())??;
+    app.opener()
+        .open_path(&dir, None::<&str>)
+        .map_err(|e| e.to_string())?;
+    Ok(dir)
+}
+
+#[tauri::command]
+async fn screenshot_open_file(
+    app: AppHandle,
+    instance_id: String,
+    filename: String,
+) -> Result<(), String> {
+    if !sync::is_safe_component(&filename) {
+        return Err("Invalid screenshot filename.".into());
+    }
+    let path = sync::instance_dir(&instance_id)
+        .join("screenshots")
+        .join(&filename);
+    if !path.is_file() {
+        return Err("Screenshot file not found.".into());
+    }
+    app.opener()
+        .open_path(path.to_string_lossy().as_ref(), None::<&str>)
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -346,6 +394,9 @@ pub fn run() {
             }
         })
         .setup(|app| {
+            let root = sync::launcher_root();
+            let _ = std::fs::create_dir_all(&root);
+            let _ = app.asset_protocol_scope().allow_directory(&root, true);
             community::update_discord_rpc("In PETABLOCKS Launcher", "Ready to Play");
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
@@ -382,6 +433,7 @@ pub fn run() {
             server_ping,
             screenshots_list,
             screenshots_dir,
+            screenshot_open_file,
             crash_latest,
             crash_submit_webhook,
             feedback_submit,
