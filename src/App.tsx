@@ -27,6 +27,8 @@ import { BuyMeACoffeeLogo } from "./components/BrandIcons";
 import { APP_VERSION } from "./version";
 import SidebarAccountPill from "./components/SidebarAccountPill";
 import { DiscordLinkStatus } from "./community";
+import { INSTANCES } from "./instances";
+import { getSyncState, onPlaytimeUpdated } from "./sync";
 
 type Tab = "play" | "mods" | "packs" | "screenshots" | "news" | "feedback" | "settings";
 
@@ -36,7 +38,7 @@ const NAV: { id: Tab; label: string; icon: typeof Gamepad2; badge?: string }[] =
   { id: "packs", label: "Shaders & Packs", icon: Sparkles },
   { id: "screenshots", label: "Screenshots", icon: Image },
   { id: "news", label: "News", icon: Newspaper },
-  { id: "feedback", label: "Beta Feedback", icon: Bug, badge: "BETA" },
+  { id: "feedback", label: "Feedback", icon: Bug },
   { id: "settings", label: "Settings", icon: SettingsIcon },
 ];
 
@@ -47,6 +49,26 @@ export default function App() {
   const [updateInfo, setUpdateInfo] = useState<LauncherUpdateInfo | null>(null);
   const [checkingUpdate, setCheckingUpdate] = useState(false);
   const [installingUpdate, setInstallingUpdate] = useState(false);
+  const [playtimeByInstance, setPlaytimeByInstance] = useState<
+    Record<string, { seconds: number; sessions: number }>
+  >({});
+
+  async function refreshAllPlaytime() {
+    if (!inTauri) return;
+    const entries: Record<string, { seconds: number; sessions: number }> = {};
+    for (const inst of INSTANCES) {
+      try {
+        const st = await getSyncState(inst.id);
+        entries[inst.id] = {
+          seconds: st.totalPlaytimeSeconds ?? 0,
+          sessions: st.sessionsPlayed ?? 0,
+        };
+      } catch {
+        // ignore
+      }
+    }
+    setPlaytimeByInstance(entries);
+  }
 
   async function runUpdateCheck() {
     setCheckingUpdate(true);
@@ -62,9 +84,34 @@ export default function App() {
 
   useEffect(() => {
     runUpdateCheck();
+    refreshAllPlaytime();
+    let unlisten: (() => void) | null = null;
+    onPlaytimeUpdated((instId, st) => {
+      setPlaytimeByInstance((prev) => ({
+        ...prev,
+        [instId]: {
+          seconds: st.totalPlaytimeSeconds ?? 0,
+          sessions: st.sessionsPlayed ?? 0,
+        },
+      }));
+    }).then((u) => {
+      unlisten = u;
+    });
     const timer = setInterval(runUpdateCheck, 120000);
-    return () => clearInterval(timer);
+    return () => {
+      clearInterval(timer);
+      unlisten?.();
+    };
   }, []);
+
+  const totalPlaytimeSeconds = Object.values(playtimeByInstance).reduce(
+    (sum, v) => sum + v.seconds,
+    0
+  );
+  const totalSessionsPlayed = Object.values(playtimeByInstance).reduce(
+    (sum, v) => sum + v.sessions,
+    0
+  );
 
   async function handleInstallUpdate() {
     if (!updateInfo?.downloadUrl) return;
@@ -139,6 +186,8 @@ export default function App() {
               onSession={setSession}
               discordStatus={discordStatus}
               onDiscordStatus={setDiscordStatus}
+              totalPlaytimeSeconds={totalPlaytimeSeconds}
+              sessionsPlayed={totalSessionsPlayed}
             />
           </div>
 

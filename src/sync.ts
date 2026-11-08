@@ -65,10 +65,16 @@ export const getChangelog = (instanceId: string, changelogUrl: string) =>
     ? invoke<string>("sync_get_changelog", { instanceId, changelogUrl })
     : Promise.reject(new Error("Requires Tauri runtime"));
 
-export const getSyncState = (instanceId: string) =>
+export const getSyncState = (instanceId: string): Promise<InstanceState> =>
   inTauri
     ? invoke<InstanceState>("sync_get_state", { instanceId })
-    : Promise.resolve({ installedVersion: null, disabledMods: [] });
+    : Promise.resolve({
+        installedVersion: null,
+        disabledMods: [],
+        totalPlaytimeSeconds: 0,
+        sessionsPlayed: 0,
+        lastPlayedEpoch: null,
+      });
 
 export const setModEnabled = (instanceId: string, slug: string, enabled: boolean) =>
   invoke<InstanceState>("sync_set_mod_enabled", { instanceId, slug, enabled });
@@ -104,6 +110,21 @@ export const openPacksDir = (instanceId: string, kind: "shader" | "resourcepack"
 
 export const onSyncProgress = (cb: (p: SyncProgress) => void): Promise<UnlistenFn> =>
   inTauri ? listen<SyncProgress>("sync-progress", (e) => cb(e.payload)) : Promise.resolve(() => {});
+
+export const onPlaytimeUpdated = (
+  cb: (instanceId: string, state: InstanceState) => void
+): Promise<UnlistenFn> =>
+  inTauri
+    ? listen<[string, InstanceState]>("playtime-updated", (e) => cb(e.payload[0], e.payload[1]))
+    : Promise.resolve(() => {});
+
+export function formatPlaytime(seconds = 0): string {
+  if (seconds < 60) return "0m";
+  const hrs = Math.floor(seconds / 3600);
+  const mins = Math.floor((seconds % 3600) / 60);
+  if (hrs === 0) return `${mins}m`;
+  return `${hrs}h ${mins}m`;
+}
 
 export function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;

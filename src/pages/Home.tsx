@@ -19,14 +19,17 @@ import {
 import { INSTANCES, Instance } from "../instances";
 import AccountCard from "../components/AccountCard";
 import { MinecraftServerIcon } from "../components/MinecraftServerIcon";
+import { InlineMarkdown, parseChangelog } from "./News";
 import { Session, inTauri } from "../auth";
 import {
   InstanceState,
   LauncherManifest,
   SyncProgress,
+  formatPlaytime,
   getChangelog,
   getManifest,
   getSyncState,
+  onPlaytimeUpdated,
   onSyncProgress,
   syncInstance,
 } from "../sync";
@@ -63,6 +66,7 @@ export default function Home({ session, onSession, discordStatus, onDiscordStatu
 
   // Active instance sync / manifest
   const [manifest, setManifest] = useState<LauncherManifest | null>(null);
+  const [instanceStates, setInstanceStates] = useState<Record<string, InstanceState>>({});
   const [syncState, setSyncState] = useState<InstanceState>({
     installedVersion: null,
     disabledMods: [],
@@ -107,10 +111,26 @@ export default function Home({ session, onSession, discordStatus, onDiscordStatu
     return () => clearInterval(interval);
   }, []);
 
+  // Load initial sync states for all instances
+  useEffect(() => {
+    for (const inst of INSTANCES) {
+      getSyncState(inst.id)
+        .then((st) => {
+          setInstanceStates((prev) => ({ ...prev, [inst.id]: st }));
+        })
+        .catch(() => {});
+    }
+  }, []);
+
   // Update manifest and sync state when instance changes
   useEffect(() => {
     if (!selectedInstance.manifestUrl) return;
-    getSyncState(selectedInstance.id).then(setSyncState).catch(() => {});
+    getSyncState(selectedInstance.id)
+      .then((st) => {
+        setSyncState(st);
+        setInstanceStates((prev) => ({ ...prev, [selectedInstance.id]: st }));
+      })
+      .catch(() => {});
     if (inTauri) {
       getManifest(selectedInstance.id, selectedInstance.manifestUrl)
         .then(setManifest)
@@ -123,6 +143,12 @@ export default function Home({ session, onSession, discordStatus, onDiscordStatu
     const unlisteners: (() => void)[] = [];
     onSyncProgress((p) => {
       if (p.instanceId === selectedInstance.id) setProgress(p);
+    }).then((u) => unlisteners.push(u));
+    onPlaytimeUpdated((instId, st) => {
+      setInstanceStates((prev) => ({ ...prev, [instId]: st }));
+      if (instId === selectedInstance.id) {
+        setSyncState(st);
+      }
     }).then((u) => unlisteners.push(u));
     onLaunchStatus((s) => setLaunchStatus(s)).then((u) => unlisteners.push(u));
     onGameState((st) => {
@@ -359,6 +385,31 @@ export default function Home({ session, onSession, discordStatus, onDiscordStatu
                           : inst.loader.replace(/NeoForge\s*|Forge\s*/i, "")}
                       </span>
                     </span>
+                    {isPlayable && (
+                      <>
+                        <span className="text-white/20">•</span>
+                        <span
+                          className="inline-flex items-center gap-1 font-semibold text-pb-cyan"
+                          title="Total Playtime & Sessions on this modpack"
+                        >
+                          <Clock size={13} />
+                          <span>
+                            {formatPlaytime(
+                              (isSelected ? syncState : instanceStates[inst.id])
+                                ?.totalPlaytimeSeconds ?? 0
+                            )}
+                          </span>
+                          <span className="text-pb-muted">
+                            ({(isSelected ? syncState : instanceStates[inst.id])?.sessionsPlayed ?? 0}{" "}
+                            {((isSelected ? syncState : instanceStates[inst.id])?.sessionsPlayed ?? 0) ===
+                            1
+                              ? "session"
+                              : "sessions"}
+                            )
+                          </span>
+                        </span>
+                      </>
+                    )}
                   </div>
 
                   {isPlayable ? (
@@ -581,11 +632,48 @@ export default function Home({ session, onSession, discordStatus, onDiscordStatu
                   <Loader2 size={24} className="animate-spin text-pb-cyan mb-2" />
                   <span>Loading release notes...</span>
                 </div>
-              ) : (
-                <pre className="whitespace-pre-wrap font-sans text-xs leading-relaxed text-white/80">
-                  {changelogContent}
-                </pre>
-              )}
+              ) : changelogContent ? (
+                <div className="space-y-4">
+                  {parseChangelog(changelogContent).map((rel, idx) => (
+                    <div
+                      key={`${rel.version}-${idx}`}
+                      className="rounded-xl border border-white/10 bg-black/30 p-4"
+                    >
+                      <div className="flex items-center justify-between border-b border-white/10 pb-2">
+                        <span className="font-mono text-xs font-extrabold text-pb-cyan">
+                          v{rel.version}
+                        </span>
+                        {rel.date && <span className="text-[11px] text-pb-muted">{rel.date}</span>}
+                      </div>
+                      <div className="mt-2.5 space-y-2.5">
+                        {rel.sections.map((sec) => (
+                          <div key={sec.title}>
+                            <h4 className="mb-1 text-[10px] font-extrabold uppercase tracking-wider text-pb-mint">
+                              {sec.title}
+                            </h4>
+                            <ul className="list-disc space-y-1 pl-5 text-xs text-white/85">
+                              {sec.items.map((item, i) => (
+                                <li key={i}>
+                                  <InlineMarkdown text={item.heading} />
+                                  {item.subItems.length > 0 && (
+                                    <ul className="mt-0.5 list-circle space-y-0.5 pl-4 text-[11px] text-pb-muted">
+                                      {item.subItems.map((sub, j) => (
+                                        <li key={j}>
+                                          <InlineMarkdown text={sub} />
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  )}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
             </div>
 
             {/* Modal Footer */}

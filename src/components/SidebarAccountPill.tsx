@@ -207,7 +207,11 @@ export default function SidebarAccountPill({
                   {session.profile.name}
                 </p>
                 <p className="truncate text-[10px] text-pb-muted">
-                  {isDiscordReady ? "Beta Player" : "Link Discord"}
+                  {isDiscordReady
+                    ? `${formatPlaytime(totalPlaytimeSeconds)} • ${sessionsPlayed} ${
+                        sessionsPlayed === 1 ? "session" : "sessions"
+                      }`
+                    : "Link Discord"}
                 </p>
               </div>
             </div>

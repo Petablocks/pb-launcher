@@ -303,9 +303,8 @@ pub fn open_custom_mods_dir(instance_id: &str) -> Result<String, String> {
     Ok(custom_dir.to_string_lossy().to_string())
 }
 
-pub fn record_session_playtime(instance_id: &str, elapsed_seconds: u64) {
+pub fn record_session_start(instance_id: &str) -> InstanceState {
     let mut state = load_state(instance_id);
-    state.total_playtime_seconds = state.total_playtime_seconds.saturating_add(elapsed_seconds);
     state.sessions_played = state.sessions_played.saturating_add(1);
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -313,6 +312,21 @@ pub fn record_session_playtime(instance_id: &str, elapsed_seconds: u64) {
         .unwrap_or(0);
     state.last_played_epoch = Some(now);
     let _ = save_state(instance_id, &state);
+    state
+}
+
+pub fn add_playtime_delta(instance_id: &str, delta_seconds: u64) -> InstanceState {
+    let mut state = load_state(instance_id);
+    if delta_seconds > 0 {
+        state.total_playtime_seconds = state.total_playtime_seconds.saturating_add(delta_seconds);
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+        state.last_played_epoch = Some(now);
+        let _ = save_state(instance_id, &state);
+    }
+    state
 }
 
 #[derive(Debug, Clone, Serialize)]

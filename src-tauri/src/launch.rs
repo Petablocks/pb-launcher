@@ -530,6 +530,10 @@ pub async fn launch_game(app: AppHandle, req: LaunchRequest) -> Result<(), Strin
         .spawn()
         .map_err(|e| format!("Failed to spawn Minecraft process: {e}"))?;
 
+    // Immediately record session start (+1 session) and notify frontend
+    let initial_state = crate::sync::record_session_start(&req.instance_id);
+    let _ = app.emit("playtime-updated", (&req.instance_id, &initial_state));
+
     let game_pid = child.id().unwrap_or_else(|| std::process::id());
     let server_addr = req.server_address.clone();
     let rpc_start = std::time::SystemTime::now()
@@ -546,12 +550,35 @@ pub async fn launch_game(app: AppHandle, req: LaunchRequest) -> Result<(), Strin
     );
 
     // Spawn a persistent heartbeat task that keeps Discord Rich Presence alive
+    // and flushes playtime to disk every 15 seconds while the game is running
     let (rpc_tx, mut rpc_rx) = tokio::sync::mpsc::channel::<()>(1);
+    let last_saved_instant = std::sync::Arc::new(std::sync::Mutex::new(Instant::now()));
+    let last_saved_for_tick = last_saved_instant.clone();
+    let inst_for_tick = req.instance_id.clone();
+    let app_for_tick = app.clone();
     tokio::spawn(async move {
         let mut interval = tokio::time::interval(std::time::Duration::from_secs(15));
+        // First tick fires immediately; skip it so we don't double-emit at 0s
+        interval.tick().await;
         loop {
             tokio::select! {
                 _ = interval.tick() => {
+                    let delta = {
+                        if let Ok(mut guard) = last_saved_for_tick.lock() {
+                            let d = guard.elapsed().as_secs();
+                            if d > 0 {
+                                *guard = Instant::now();
+                            }
+                            d
+                        } else {
+                            0
+                        }
+                    };
+                    if delta > 0 {
+                        let st = crate::sync::add_playtime_delta(&inst_for_tick, delta);
+                        let _ = app_for_tick.emit("playtime-updated", (&inst_for_tick, &st));
+                    }
+
                     // Blocking pipe I/O: keep it off the async worker threads.
                     let state = format!("Connected to {server_addr}");
                     let _ = tokio::task::spawn_blocking(move || {
@@ -616,12 +643,17 @@ pub async fn launch_game(app: AppHandle, req: LaunchRequest) -> Result<(), Strin
 
     let app_wait = app.clone();
     let inst_id = req.instance_id.clone();
-    let started_at = Instant::now();
+    let last_saved_for_exit = last_saved_instant.clone();
     tokio::spawn(async move {
         let code = child.wait().await.ok().and_then(|s| s.code()).unwrap_or(-1);
         let _ = rpc_tx.send(()).await;
-        let elapsed = started_at.elapsed().as_secs();
-        crate::sync::record_session_playtime(&inst_id, elapsed);
+        let remainder = last_saved_for_exit
+            .lock()
+            .ok()
+            .map(|g| g.elapsed().as_secs())
+            .unwrap_or(0);
+        let final_state = crate::sync::add_playtime_delta(&inst_id, remainder);
+        let _ = app_wait.emit("playtime-updated", (&inst_id, &final_state));
         crate::community::update_discord_rpc("In PETABLOCKS Launcher", "Ready to Play");
         // Always restore the launcher window when game terminates
         if let Some(main_win) = app_wait.get_webview_window("main") {
