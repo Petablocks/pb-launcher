@@ -534,15 +534,50 @@ fn save_state_unlocked(instance_id: &str, state: &InstanceState) -> Result<(), S
     atomic_write(&state_path(instance_id), json.as_bytes())
 }
 
+async fn fetch_staging_manifest_url(client: &reqwest::Client) -> Option<String> {
+    let res = client
+        .get("https://api.github.com/repos/Petablocks/petablocks-modpack-s2/releases?per_page=5")
+        .header("Accept", "application/vnd.github+json")
+        .send()
+        .await
+        .ok()?;
+    if !res.status().is_success() {
+        return None;
+    }
+    let releases: Vec<serde_json::Value> = res.json().await.ok()?;
+    let newest = releases
+        .into_iter()
+        .find(|r| !r["draft"].as_bool().unwrap_or(false))?;
+    let assets = newest["assets"].as_array()?;
+    for asset in assets {
+        if asset["name"].as_str() == Some("launcher-manifest.json") {
+            if let Some(url) = asset["browser_download_url"].as_str() {
+                return Some(url.to_string());
+            }
+        }
+    }
+    None
+}
+
 pub async fn fetch_manifest(
     instance_id: &str,
     manifest_url: &str,
 ) -> Result<LauncherManifest, String> {
     validate_version_token("instance_id", instance_id)?;
     let client = http_client();
+    let staging = tokio::task::spawn_blocking(crate::settings::is_staging_channel)
+        .await
+        .unwrap_or(false);
 
     // Only fetch the instance's own configured manifest URL (never fall back across different modpacks!)
     let mut candidate_urls = Vec::new();
+    if staging && instance_id == "petablocks-s2" {
+        if let Some(staging_url) = fetch_staging_manifest_url(client).await {
+            if is_allowed_download_url(&staging_url) {
+                candidate_urls.push(staging_url);
+            }
+        }
+    }
     let trimmed = manifest_url.trim();
     if !trimmed.is_empty() && is_allowed_download_url(trimmed) {
         candidate_urls.push(trimmed.to_string());

@@ -10,6 +10,7 @@ export interface LauncherSettings {
   closeOnLaunch: boolean;
   directConnect: boolean;
   crashWebhookUrl?: string | null;
+  updateChannel?: "stable" | "staging";
 }
 
 export interface JavaStatus {
@@ -41,6 +42,7 @@ const DEFAULT_SETTINGS: LauncherSettings = {
   closeOnLaunch: true,
   directConnect: true,
   crashWebhookUrl: null,
+  updateChannel: "stable",
 };
 
 export const getSettings = (): Promise<LauncherSettings> =>

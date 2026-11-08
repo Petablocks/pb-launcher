@@ -17,10 +17,16 @@ pub struct LauncherSettings {
     pub direct_connect: bool,
     #[serde(default)]
     pub crash_webhook_url: Option<String>,
+    #[serde(default = "default_update_channel")]
+    pub update_channel: String, // "stable" or "staging"
 }
 
 fn default_tuning_preset() -> String {
     "standard".to_string()
+}
+
+fn default_update_channel() -> String {
+    "stable".to_string()
 }
 
 fn default_true() -> bool {
@@ -37,8 +43,16 @@ impl Default for LauncherSettings {
             close_on_launch: true, // Hide launcher while playing and restore when Minecraft closes
             direct_connect: true,
             crash_webhook_url: None,
+            update_channel: "stable".into(),
         }
     }
+}
+
+pub fn is_staging_channel() -> bool {
+    load_settings()
+        .update_channel
+        .trim()
+        .eq_ignore_ascii_case("staging")
 }
 
 /// Total physical RAM in MB (0 if unknown).

@@ -3,6 +3,13 @@
 All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.12.0] - 2026-11-08
+### Added
+- **Release Update Channel Selector (`Stable` vs `Staging / Pre-release`)**:
+  - Added a **Release Update Channel** setting in **Launcher Settings** allowing you to switch between **Stable (Default)** and **Staging / Pre-release**.
+  - Players on **Stable** only receive verified full releases, while machines opted into **Staging** automatically detect and install staged pre-release builds (`-rc.1`, `-beta.1`, or GitHub Pre-releases) for both the launcher and the Season 2 modpack.
+  - Added a `STAGING` indicator badge in the sidebar version footer and Settings when opted into the staging channel.
+
 ## [1.11.1] - 2026-11-08
 ### Fixed
 - **Shaders, Resource Packs, Screenshots & Instance Folder Opening**:

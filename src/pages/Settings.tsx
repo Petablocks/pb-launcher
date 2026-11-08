@@ -3,6 +3,7 @@ import {
   CheckCircle2,
   Cpu,
   DownloadCloud,
+  FlaskConical,
   FolderOpen,
   Loader2,
   RefreshCw,
@@ -23,7 +24,11 @@ import {
 import { inTauri } from "../auth";
 import { DiscordLogo } from "../components/BrandIcons";
 
-export default function Settings() {
+export default function Settings({
+  onSettingsSaved,
+}: {
+  onSettingsSaved?: (settings: LauncherSettings) => void;
+}) {
   const instance = INSTANCES[0];
   const [settings, setSettings] = useState<LauncherSettings>({
     memoryMb: 6144,
@@ -31,6 +36,7 @@ export default function Settings() {
     extraJvmArgs: "",
     closeOnLaunch: false,
     directConnect: true,
+    updateChannel: "stable",
   });
   const [java, setJava] = useState<JavaStatus>({
     found: false,
@@ -60,6 +66,7 @@ export default function Settings() {
     setError(null);
     try {
       await saveSettings(settings);
+      onSettingsSaved?.(settings);
       const j = await detectJava();
       setJava(j);
       setSavedNotice(true);
@@ -395,6 +402,52 @@ export default function Settings() {
               }`}
             />
           </button>
+        </div>
+
+        <div className="flex flex-wrap items-center justify-between gap-4 border-t border-white/10 pt-5">
+          <div className="flex items-center gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-400/15 text-amber-300">
+              <FlaskConical size={18} />
+            </div>
+            <div>
+              <div className="flex items-center gap-2 text-sm font-bold">
+                <span>Release Update Channel</span>
+                {(settings.updateChannel ?? "stable") === "staging" && (
+                  <span className="rounded bg-amber-400/20 px-1.5 py-0.5 text-[10px] font-extrabold tracking-wider text-amber-300">
+                    STAGING
+                  </span>
+                )}
+              </div>
+              <div className="text-xs text-pb-muted">
+                Choose <strong>Stable</strong> for standard verified releases, or <strong>Staging (Pre-release)</strong> to test staged launcher &amp; modpack builds before public rollout.
+              </div>
+            </div>
+          </div>
+
+          <div className="inline-flex rounded-xl border border-white/10 bg-pb-bg p-1">
+            <button
+              type="button"
+              onClick={() => setSettings({ ...settings, updateChannel: "stable" })}
+              className={`cursor-pointer rounded-lg px-3 py-1.5 text-xs font-bold transition ${
+                (settings.updateChannel ?? "stable") === "stable"
+                  ? "bg-pb-cyan text-[#031617]"
+                  : "text-pb-muted hover:text-white"
+              }`}
+            >
+              Stable (Default)
+            </button>
+            <button
+              type="button"
+              onClick={() => setSettings({ ...settings, updateChannel: "staging" })}
+              className={`cursor-pointer rounded-lg px-3 py-1.5 text-xs font-bold transition ${
+                settings.updateChannel === "staging"
+                  ? "bg-amber-400 text-[#1a1200]"
+                  : "text-pb-muted hover:text-white"
+              }`}
+            >
+              Staging / Pre-release
+            </button>
+          </div>
         </div>
       </section>
 

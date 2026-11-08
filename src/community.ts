@@ -92,6 +92,8 @@ export interface LauncherUpdateInfo {
   downloadUrl: string | null;
   releaseUrl: string;
   notes: string;
+  channel?: "stable" | "staging";
+  prerelease?: boolean;
 }
 
 export const checkLauncherUpdate = (currentVersion: string): Promise<LauncherUpdateInfo> =>

@@ -8,6 +8,8 @@ use crate::sync::{download_to, http_client, launcher_root, ExpectedHash};
 
 const GITHUB_LATEST_RELEASE_API: &str =
     "https://api.github.com/repos/Petablocks/pb-launcher/releases/latest";
+const GITHUB_RELEASES_LIST_API: &str =
+    "https://api.github.com/repos/Petablocks/pb-launcher/releases?per_page=10";
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -18,16 +20,73 @@ pub struct LauncherUpdateInfo {
     pub download_url: Option<String>,
     pub release_url: String,
     pub notes: String,
+    pub channel: String,
+    pub prerelease: bool,
 }
 
-fn parse_semver(v: &str) -> (u32, u32, u32) {
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct SemVer {
+    major: u32,
+    minor: u32,
+    patch: u32,
+    prerelease: Option<String>,
+}
+
+impl PartialOrd for SemVer {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for SemVer {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        match (self.major, self.minor, self.patch).cmp(&(other.major, other.minor, other.patch)) {
+            std::cmp::Ordering::Equal => match (&self.prerelease, &other.prerelease) {
+                (None, None) => std::cmp::Ordering::Equal,
+                // Per SemVer 2.0.0: a normal release `1.12.0` > a pre-release `1.12.0-rc.1`
+                (None, Some(_)) => std::cmp::Ordering::Greater,
+                (Some(_), None) => std::cmp::Ordering::Less,
+                (Some(a), Some(b)) => compare_prerelease(a, b),
+            },
+            ord => ord,
+        }
+    }
+}
+
+fn compare_prerelease(a: &str, b: &str) -> std::cmp::Ordering {
+    for (pa, pb) in a.split('.').zip(b.split('.')) {
+        let ord = match (pa.parse::<u32>(), pb.parse::<u32>()) {
+            (Ok(na), Ok(nb)) => na.cmp(&nb),
+            _ => pa.cmp(pb),
+        };
+        if ord != std::cmp::Ordering::Equal {
+            return ord;
+        }
+    }
+    a.split('.').count().cmp(&b.split('.').count())
+}
+
+fn parse_semver(v: &str) -> SemVer {
     let clean = v.trim().trim_start_matches('v');
-    let mut parts = clean.split('.').map(|s| s.parse::<u32>().unwrap_or(0));
-    (
-        parts.next().unwrap_or(0),
-        parts.next().unwrap_or(0),
-        parts.next().unwrap_or(0),
-    )
+    let without_build = clean.split('+').next().unwrap_or(clean);
+    let (core, pre) = match without_build.split_once('-') {
+        Some((c, p)) => (
+            c,
+            if p.trim().is_empty() {
+                None
+            } else {
+                Some(p.trim().to_ascii_lowercase())
+            },
+        ),
+        None => (without_build, None),
+    };
+    let mut parts = core.split('.').map(|s| s.parse::<u32>().unwrap_or(0));
+    SemVer {
+        major: parts.next().unwrap_or(0),
+        minor: parts.next().unwrap_or(0),
+        patch: parts.next().unwrap_or(0),
+        prerelease: pre,
+    }
 }
 
 struct VerifiedInstallerAsset {
@@ -36,24 +95,54 @@ struct VerifiedInstallerAsset {
     sha256: Option<String>,
     release_url: String,
     notes: String,
+    prerelease: bool,
 }
 
-async fn fetch_latest_installer_asset(current_version: &str) -> Result<Option<VerifiedInstallerAsset>, String> {
+async fn fetch_latest_installer_asset(
+    current_version: &str,
+    staging: bool,
+) -> Result<Option<VerifiedInstallerAsset>, String> {
     let client = http_client();
-    let res = client
-        .get(GITHUB_LATEST_RELEASE_API)
-        .header("Accept", "application/vnd.github+json")
-        .send()
-        .await
-        .map_err(|e| e.to_string())?;
+    let val: Value = if staging {
+        let res = client
+            .get(GITHUB_RELEASES_LIST_API)
+            .header("Accept", "application/vnd.github+json")
+            .send()
+            .await
+            .map_err(|e| e.to_string())?;
+        if !res.status().is_success() {
+            return Ok(None);
+        }
+        let list: Vec<Value> = res.json().await.map_err(|e| e.to_string())?;
+        // Pick the highest SemVer non-draft release across both Stable and Pre-release tags
+        let Some(best) = list
+            .into_iter()
+            .filter(|r| !r["draft"].as_bool().unwrap_or(false))
+            .max_by(|a, b| {
+                let va = parse_semver(a["tag_name"].as_str().unwrap_or("0.0.0"));
+                let vb = parse_semver(b["tag_name"].as_str().unwrap_or("0.0.0"));
+                va.cmp(&vb)
+            })
+        else {
+            return Ok(None);
+        };
+        best
+    } else {
+        let res = client
+            .get(GITHUB_LATEST_RELEASE_API)
+            .header("Accept", "application/vnd.github+json")
+            .send()
+            .await
+            .map_err(|e| e.to_string())?;
+        if !res.status().is_success() {
+            return Ok(None);
+        }
+        res.json().await.map_err(|e| e.to_string())?
+    };
 
-    if !res.status().is_success() {
-        return Ok(None);
-    }
-
-    let val: Value = res.json().await.map_err(|e| e.to_string())?;
     let tag = val["tag_name"].as_str().unwrap_or(current_version);
     let latest_version = tag.trim_start_matches('v').to_string();
+    let prerelease = val["prerelease"].as_bool().unwrap_or(false);
     let release_url = val["html_url"]
         .as_str()
         .unwrap_or("https://github.com/Petablocks/pb-launcher/releases")
@@ -110,6 +199,7 @@ async fn fetch_latest_installer_asset(current_version: &str) -> Result<Option<Ve
             sha256: None,
             release_url,
             notes,
+            prerelease,
         }));
     };
 
@@ -119,11 +209,21 @@ async fn fetch_latest_installer_asset(current_version: &str) -> Result<Option<Ve
         sha256,
         release_url,
         notes,
+        prerelease,
     }))
 }
 
 pub async fn check_for_update(current_version: &str) -> Result<LauncherUpdateInfo, String> {
-    let Some(asset) = fetch_latest_installer_asset(current_version).await? else {
+    let staging = tokio::task::spawn_blocking(crate::settings::is_staging_channel)
+        .await
+        .unwrap_or(false);
+    let channel = if staging {
+        "staging".to_string()
+    } else {
+        "stable".to_string()
+    };
+
+    let Some(asset) = fetch_latest_installer_asset(current_version, staging).await? else {
         return Ok(LauncherUpdateInfo {
             current_version: current_version.to_string(),
             latest_version: current_version.to_string(),
@@ -131,6 +231,8 @@ pub async fn check_for_update(current_version: &str) -> Result<LauncherUpdateInf
             download_url: None,
             release_url: "https://github.com/Petablocks/pb-launcher/releases".into(),
             notes: String::new(),
+            channel,
+            prerelease: false,
         });
     };
 
@@ -149,6 +251,8 @@ pub async fn check_for_update(current_version: &str) -> Result<LauncherUpdateInf
         },
         release_url: asset.release_url,
         notes: asset.notes,
+        channel,
+        prerelease: asset.prerelease,
     })
 }
 
@@ -176,8 +280,12 @@ pub async fn install_update(
         ));
     }
 
+    let staging = tokio::task::spawn_blocking(crate::settings::is_staging_channel)
+        .await
+        .unwrap_or(false);
+
     // Re-query GitHub Releases API to obtain the canonical asset URL and mandatory SHA-256 digest
-    let asset = fetch_latest_installer_asset(compiled_version)
+    let asset = fetch_latest_installer_asset(compiled_version, staging)
         .await?
         .ok_or("Could not verify latest release metadata from GitHub.")?;
     if asset.download_url != download_url {
@@ -222,9 +330,28 @@ mod tests {
     use super::*;
 
     #[test]
-    fn semver_orders_numerically() {
+    fn semver_orders_numerically_and_prereleases() {
         assert!(parse_semver("v1.10.0") > parse_semver("1.9.9"));
-        assert_eq!(parse_semver("1.8"), (1, 8, 0));
-        assert_eq!(parse_semver("garbage"), (0, 0, 0));
+        assert!(parse_semver("1.12.0-rc.1") > parse_semver("1.11.1"));
+        assert!(parse_semver("1.12.0-rc.2") > parse_semver("1.12.0-rc.1"));
+        assert!(parse_semver("1.12.0") > parse_semver("1.12.0-rc.2"));
+        assert_eq!(
+            parse_semver("1.8"),
+            SemVer {
+                major: 1,
+                minor: 8,
+                patch: 0,
+                prerelease: None
+            }
+        );
+        assert_eq!(
+            parse_semver("garbage"),
+            SemVer {
+                major: 0,
+                minor: 0,
+                patch: 0,
+                prerelease: None
+            }
+        );
     }
 }

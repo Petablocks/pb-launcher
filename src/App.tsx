@@ -29,6 +29,7 @@ import SidebarAccountPill from "./components/SidebarAccountPill";
 import { DiscordLinkStatus } from "./community";
 import { INSTANCES } from "./instances";
 import { getSyncState, onPlaytimeUpdated } from "./sync";
+import { getSettings } from "./launch";
 
 type Tab = "play" | "mods" | "packs" | "screenshots" | "news" | "feedback" | "settings";
 
@@ -49,6 +50,7 @@ export default function App() {
   const [updateInfo, setUpdateInfo] = useState<LauncherUpdateInfo | null>(null);
   const [checkingUpdate, setCheckingUpdate] = useState(false);
   const [installingUpdate, setInstallingUpdate] = useState(false);
+  const [updateChannel, setUpdateChannel] = useState<"stable" | "staging">("stable");
   const [playtimeByInstance, setPlaytimeByInstance] = useState<
     Record<string, { seconds: number; sessions: number }>
   >({});
@@ -75,6 +77,9 @@ export default function App() {
     try {
       const info = await checkLauncherUpdate(APP_VERSION);
       setUpdateInfo(info);
+      if (info.channel) {
+        setUpdateChannel(info.channel);
+      }
     } catch {
       // Ignore network errors during background update check
     } finally {
@@ -85,6 +90,11 @@ export default function App() {
   useEffect(() => {
     let disposed = false;
     let unlisten: (() => void) | null = null;
+    getSettings()
+      .then((s) => {
+        if (!disposed) setUpdateChannel(s.updateChannel ?? "stable");
+      })
+      .catch(() => {});
     runUpdateCheck();
     refreshAllPlaytime();
     onPlaytimeUpdated((instId, st) => {
@@ -218,7 +228,14 @@ export default function App() {
           </div>
 
           <div className="flex items-center justify-between px-3 pb-1 text-xs text-pb-muted">
-            <span>Launcher v{APP_VERSION}</span>
+            <span className="flex items-center gap-1.5">
+              <span>Launcher v{APP_VERSION}</span>
+              {updateChannel === "staging" && (
+                <span className="rounded bg-amber-400/20 px-1.5 py-0.5 text-[9px] font-extrabold tracking-wider text-amber-300">
+                  STAGING
+                </span>
+              )}
+            </span>
             <button
               onClick={runUpdateCheck}
               disabled={checkingUpdate}
@@ -249,7 +266,12 @@ export default function App() {
             ) : tab === "feedback" ? (
               <Feedback session={session} />
             ) : (
-              <Settings />
+              <Settings
+                onSettingsSaved={(s) => {
+                  setUpdateChannel(s.updateChannel ?? "stable");
+                  runUpdateCheck();
+                }}
+              />
             )}
           </main>
 

@@ -60,4 +60,4 @@ jobs:
           releaseName: "PETABLOCKS Launcher v__VERSION__"
           releaseBody: "Official PETABLOCKS Launcher release. Download the `.exe` installer below."
           releaseDraft: false
-          prerelease: false
+          prerelease: ${{ contains(github.ref_name, '-') }}
