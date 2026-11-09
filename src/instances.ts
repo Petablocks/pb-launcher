@@ -53,6 +53,8 @@ export const INSTANCES: Instance[] = [
     loaderVersion: "21.1.233",
     manifestUrl:
       "https://github.com/Petablocks/pb-launcher/releases/latest/download/launcher-manifest-create2.json",
+    changelogUrl:
+      "https://github.com/Petablocks/pb-modpacks/releases/download/create2-v1.4.1/CHANGELOG.md",
     status: "playable",
     logoImage: "/cards/logo-create2.png",
     bgImage: "/cards/bg-create2.jpg",

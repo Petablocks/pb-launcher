@@ -304,4 +304,12 @@ mod tests {
             ("::1".to_string(), 25565)
         );
     }
+
+    #[tokio::test]
+    async fn test_live_ping_servers() {
+        let s2 = ping_server("s2.petablocks.com").await;
+        println!("s2 ping: online={}, players={}/{}, motd={:?}, latency={:?}", s2.online, s2.online_players, s2.max_players, s2.motd, s2.latency_ms);
+        let c2 = ping_server("create2.petablocks.com").await;
+        println!("c2 ping: online={}, players={}/{}, motd={:?}, latency={:?}", c2.online, c2.online_players, c2.max_players, c2.motd, c2.latency_ms);
+    }
 }

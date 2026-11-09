@@ -3,6 +3,16 @@
 All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.14.0] - 2026-11-09
+### Added
+- **Live Server Status & Online Player Counters**:
+  - Enhanced server ping display on all Play cards with real-time player counts, ping latency badge, and detailed MOTD / server latency hover tooltips.
+- **Dynamic Multi-Modpack News & Changelog Tab**:
+  - Integrated `InstanceSelector` into the **News** tab so players can switch release note feeds between Season 2 and Create 2 with a single click.
+  - Dynamically fetches modpack patch notes from `Petablocks/pb-modpacks` per active modpack.
+- **Automated Modpack CI/CD Workflows**:
+  - Set up GitHub Actions automation in `Petablocks/petablocks-modpack-create2` (`.github/workflows/release.yml`) for automated building of `.mrpack` and `launcher-manifest-create2.json` and publishing to `Petablocks/pb-modpacks`.
+
 ## [1.13.1] - 2026-11-09
 ### Fixed
 - **Modpack Overrides Extraction on Empty Files**:

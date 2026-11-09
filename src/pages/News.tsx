@@ -14,9 +14,10 @@ import {
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { inTauri } from "../auth";
 import { BuyMeACoffeeLogo, DiscordLogo, GitHubLogo } from "../components/BrandIcons";
-import { INSTANCES } from "../instances";
+import { INSTANCES, Instance } from "../instances";
 import { getChangelog } from "../sync";
 import { APP_VERSION } from "../version";
+import InstanceSelector from "../components/InstanceSelector";
 import launcherChangelogRaw from "../../CHANGELOG.md?raw";
 
 interface ChangelogItem {
@@ -200,13 +201,22 @@ type NewsFeedTab = "announcements" | "launcher" | "modpack";
 
 const launcherReleases = parseChangelog(launcherChangelogRaw);
 
-export default function News() {
+interface NewsProps {
+  selectedInstanceId?: string;
+  onSelectInstance?: (id: string) => void;
+}
+
+export default function News({
+  selectedInstanceId = "petablocks-s2",
+  onSelectInstance,
+}: NewsProps) {
   const [activeTab, setActiveTab] = useState<NewsFeedTab>("announcements");
   const [modpackReleases, setModpackReleases] = useState<ParsedRelease[]>([]);
   const [loadingModpack, setLoadingModpack] = useState(false);
   const [modpackError, setModpackError] = useState<string | null>(null);
 
-  const s2Instance = INSTANCES[0];
+  const activeInstance =
+    INSTANCES.find((i) => i.id === selectedInstanceId) ?? INSTANCES[0];
 
   async function loadModpackChangelog() {
     if (!inTauri) return;
@@ -214,9 +224,11 @@ export default function News() {
     setModpackError(null);
     try {
       const url =
-        s2Instance.changelogUrl ??
-        "https://github.com/Petablocks/pb-launcher/releases/latest/download/CHANGELOG.md";
-      const raw = await getChangelog(s2Instance.id, url);
+        activeInstance.changelogUrl ??
+        (activeInstance.id === "petablocks-s2"
+          ? "https://github.com/Petablocks/pb-launcher/releases/latest/download/CHANGELOG.md"
+          : "https://github.com/Petablocks/pb-modpacks/releases/latest/download/CHANGELOG.md");
+      const raw = await getChangelog(activeInstance.id, url);
       setModpackReleases(parseChangelog(raw));
     } catch (err) {
       setModpackError(String(err));
@@ -228,7 +240,7 @@ export default function News() {
   useEffect(() => {
     loadModpackChangelog();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [activeInstance.id, activeInstance.changelogUrl]);
 
   function openExternal(url: string) {
     if (inTauri) openUrl(url).catch(() => {});
@@ -243,21 +255,29 @@ export default function News() {
         <div>
           <h1 className="text-2xl font-extrabold">News & Release Notes</h1>
           <p className="mt-1 text-xs text-pb-muted">
-            Official network announcements, Launcher updates, and live Season 2 Modpack patch notes.
+            Official network announcements, Launcher updates, and live Modpack patch notes.
           </p>
         </div>
 
-        {activeTab === "modpack" && (
-          <button
-            type="button"
-            onClick={loadModpackChangelog}
-            disabled={loadingModpack}
-            className="inline-flex cursor-pointer items-center gap-1.5 rounded-xl border border-white/10 bg-pb-card px-3.5 py-2 text-xs font-bold text-pb-muted transition hover:border-white/20 hover:text-white disabled:opacity-50"
-          >
-            <RefreshCw size={13} className={loadingModpack ? "animate-spin text-pb-cyan" : ""} />
-            <span>Refresh Feed</span>
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          {onSelectInstance && (
+            <InstanceSelector
+              selectedInstanceId={selectedInstanceId}
+              onSelectInstance={onSelectInstance}
+            />
+          )}
+          {activeTab === "modpack" && (
+            <button
+              type="button"
+              onClick={loadModpackChangelog}
+              disabled={loadingModpack}
+              className="inline-flex cursor-pointer items-center gap-1.5 rounded-xl border border-white/10 bg-pb-card px-3.5 py-2 text-xs font-bold text-pb-muted transition hover:border-white/20 hover:text-white disabled:opacity-50"
+            >
+              <RefreshCw size={13} className={loadingModpack ? "animate-spin text-pb-cyan" : ""} />
+              <span>Refresh Feed</span>
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Quick community links */}
@@ -357,7 +377,7 @@ export default function News() {
           }`}
         >
           <Package size={14} />
-          <span>Season 2 Modpack</span>
+          <span>{activeInstance.name.replace("PETABLOCKS ", "")} Modpack</span>
           {latestModpackVer && (
             <span
               className={`rounded-full px-1.5 py-0.2 font-mono text-[10px] ${
@@ -452,13 +472,13 @@ export default function News() {
         </div>
       )}
 
-      {/* Tab 3: Season 2 Modpack Updates (fetched live via sync_get_changelog) */}
+      {/* Tab 3: Active Modpack Updates (fetched live via sync_get_changelog) */}
       {activeTab === "modpack" && (
         <div className="space-y-4">
           {loadingModpack ? (
             <div className="flex flex-col items-center justify-center rounded-2xl border border-white/10 bg-pb-card py-14 text-pb-muted">
               <Loader2 size={24} className="mb-2 animate-spin text-pb-cyan" />
-              <span className="text-xs">Fetching latest Season 2 Modpack release notes...</span>
+              <span className="text-xs">Fetching latest {activeInstance.name} release notes...</span>
             </div>
           ) : modpackError ? (
             <div className="rounded-2xl border border-red-500/30 bg-red-500/10 p-5 text-xs text-red-300">

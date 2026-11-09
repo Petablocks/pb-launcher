@@ -286,7 +286,10 @@ export default function App() {
                 onSelectInstance={handleSelectInstance}
               />
             ) : tab === "news" ? (
-              <News />
+              <News
+                selectedInstanceId={selectedInstanceId}
+                onSelectInstance={handleSelectInstance}
+              />
             ) : tab === "feedback" ? (
               <Feedback session={session} />
             ) : (

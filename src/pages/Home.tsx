@@ -374,20 +374,34 @@ export default function Home({
 
                 {/* Server Ping Badge */}
                 <div
-                  className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-bold backdrop-blur-md ${
+                  className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-bold backdrop-blur-md transition-colors ${
                     status?.online
-                      ? "border border-pb-mint/30 bg-pb-mint/20 text-pb-mint"
+                      ? "border border-pb-mint/30 bg-pb-mint/20 text-pb-mint shadow-[0_0_12px_rgba(16,185,129,0.15)]"
                       : "border border-white/10 bg-black/60 text-pb-muted"
                   }`}
+                  title={
+                    status?.online
+                      ? `${status.motd ? `${status.motd}\n` : ""}Latency: ${status.latencyMs ?? "?"}ms\nPlayers: ${status.onlinePlayers} / ${status.maxPlayers}`
+                      : `${inst.serverAddress} (offline or unreachable)`
+                  }
                 >
                   <span
                     className={`h-2 w-2 rounded-full ${
                       status?.online ? "animate-pulse bg-pb-mint" : "bg-neutral-500"
                     }`}
                   />
-                  {status?.online
-                    ? `${status.onlinePlayers} / ${status.maxPlayers} online`
-                    : inst.serverAddress}
+                  {status?.online ? (
+                    <span className="flex items-center gap-1.5">
+                      <span>{status.onlinePlayers} / {status.maxPlayers} online</span>
+                      {status.latencyMs != null && (
+                        <span className="text-[10px] opacity-75 font-mono">
+                          • {status.latencyMs}ms
+                        </span>
+                      )}
+                    </span>
+                  ) : (
+                    <span>{inst.serverAddress}</span>
+                  )}
                 </div>
               </div>
 
