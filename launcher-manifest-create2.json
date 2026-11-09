@@ -1,13 +1,13 @@
 {
     "formatVersion":  2,
-    "version":  "1.4.0",
+    "version":  "1.4.1",
     "name":  "PETABLOCKS Create 2",
     "minecraft":  "1.21.1",
     "loader":  "neoforge",
     "neoforge":  "21.1.233",
-    "mrpackUrl":  "https://github.com/Petablocks/pb-launcher/releases/latest/download/PETABLOCKS-Create-2-1.4.0.mrpack",
-    "mrpackSha256":  "a1143a2b6aa7c5f538724f13f37904df9772ce9dd9b07932f2c6c37ac1b8134d",
-    "mrpackSize":  25336366,
+    "mrpackUrl":  "https://github.com/Petablocks/pb-launcher/releases/latest/download/PETABLOCKS-Create-2-1.4.1.mrpack",
+    "mrpackSha256":  "0dc2153d4f4b117817956252c097ebf90f1b15b0ffed60fd92998ba68a4f11eb",
+    "mrpackSize":  25553568,
     "mods":  [
                  {
                      "slug":  "create_pattern_schematics",

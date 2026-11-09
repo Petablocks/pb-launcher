@@ -1099,7 +1099,6 @@ pub async fn sync_instance(
     }
 
     // 3. Apply overrides from .mrpack if version changed or if shaderpacks/options are missing
-    let mut overrides_ok = true;
     let shaderpacks_dir = base_dir.join("shaderpacks");
     let has_shaderpacks = fs::read_dir(&shaderpacks_dir)
         .map(|mut d| d.any(|e| e.is_ok()))
@@ -1110,14 +1109,8 @@ pub async fn sync_instance(
     if needs_overrides {
         emit("overrides", 0, 1, "Applying modpack configs & overrides...");
         if let Err(e) = apply_mrpack_overrides(&instance_id, &base_dir, &manifest).await {
-            overrides_ok = false;
-            log_event("WARN", &format!("Overrides failed for {instance_id}: {e}"));
-            emit(
-                "overrides",
-                0,
-                1,
-                &format!("Overrides not applied (will retry): {e}"),
-            );
+            log_event("ERROR", &format!("Overrides failed for {instance_id}: {e}"));
+            return Err(format!("Failed to apply modpack configs & overrides: {e}"));
         }
     }
 
@@ -1136,10 +1129,8 @@ pub async fn sync_instance(
             .lock()
             .map_err(|_| "State lock poisoned".to_string())?;
         let mut st = load_state_unlocked(&instance_id);
-        if overrides_ok {
-            st.installed_version = Some(manifest.version.clone());
-            save_state_unlocked(&instance_id, &st)?;
-        }
+        st.installed_version = Some(manifest.version.clone());
+        save_state_unlocked(&instance_id, &st)?;
         st
     };
 
@@ -1257,7 +1248,9 @@ async fn apply_mrpack_overrides(
                 fs::create_dir_all(parent).map_err(|e| e.to_string())?;
             }
             let mut out = File::create(&dest).map_err(|e| format!("{rel}: {e}"))?;
-            io::copy(&mut entry, &mut out).map_err(|e| format!("{rel}: {e}"))?;
+            if entry.size() > 0 {
+                io::copy(&mut entry, &mut out).map_err(|e| format!("{rel}: {e}"))?;
+            }
         }
         Ok::<(), String>(())
     })
@@ -1416,5 +1409,67 @@ mod tests {
             .is_file());
         assert!(dst.join("launcher.log").is_file());
         let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn test_extract_create2_mrpack_reproduction() {
+        let mrpack_path = Path::new("../PETABLOCKS-Create-2-1.4.1.mrpack");
+        if !mrpack_path.exists() {
+            println!("mrpack not found at {:?}", mrpack_path);
+            return;
+        }
+        let temp_dir = std::env::temp_dir().join("test_create2_extract");
+        let _ = fs::remove_dir_all(&temp_dir);
+        fs::create_dir_all(&temp_dir).unwrap();
+
+        let file = File::open(mrpack_path).unwrap();
+        let mut archive = zip::ZipArchive::new(file).unwrap();
+        println!("Archive total entries: {}", archive.len());
+        let mut extracted = 0;
+        let mut skipped = 0;
+        for i in 0..archive.len() {
+            let mut entry = match archive.by_index(i) {
+                Ok(e) => e,
+                Err(err) => {
+                    panic!("Failed to read entry {i}: {err}");
+                }
+            };
+            let Some(p) = entry.enclosed_name() else {
+                skipped += 1;
+                continue;
+            };
+            let Ok(rel_path) = p.strip_prefix("overrides") else {
+                skipped += 1;
+                continue;
+            };
+            if rel_path.as_os_str().is_empty() || entry.is_dir() {
+                skipped += 1;
+                continue;
+            }
+            let rel = rel_path.to_string_lossy().replace('\\', "/");
+            let dest = temp_dir.join(rel_path);
+            if (rel == "options.txt" || rel == "servers.dat") && dest.exists() {
+                skipped += 1;
+                continue;
+            }
+            if let Some(parent) = dest.parent() {
+                fs::create_dir_all(parent).unwrap();
+            }
+            let mut out = match File::create(&dest) {
+                Ok(f) => f,
+                Err(err) => {
+                    panic!("Failed to create file for {dest:?}: {err}");
+                }
+            };
+            if entry.size() > 0 {
+                if let Err(err) = std::io::copy(&mut entry, &mut out) {
+                    panic!("Failed to extract {:?} (entry index {}): {}", entry.name(), i, err);
+                }
+            }
+            extracted += 1;
+        }
+        println!("Extracted {extracted} files successfully, skipped {skipped}");
+        assert!(temp_dir.join("kubejs").exists(), "kubejs folder must exist");
+        let _ = fs::remove_dir_all(&temp_dir);
     }
 }

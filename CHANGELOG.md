@@ -3,6 +3,13 @@
 All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.13.1] - 2026-11-09
+### Fixed
+- **Modpack Overrides Extraction on Empty Files**:
+  - Fixed an issue where extracting `.mrpack` archives failed on 0-byte override files (such as `overrides/config/xaeropatreon.txt`), causing the `zip` crate to return `Invalid checksum` and silently aborting modpack overrides unpacking.
+  - Ensured all KubeJS scripts, custom items, and block registries unpack cleanly into instances.
+  - Made override extraction failures return explicit error dialogs rather than failing silently with outdated version states.
+
 ## [1.13.0] - 2026-11-09
 ### Added
 - **Multi-Modpack Support (PETABLOCKS Create 2)**:
