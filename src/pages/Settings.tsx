@@ -25,11 +25,14 @@ import { inTauri } from "../auth";
 import { DiscordLogo } from "../components/BrandIcons";
 
 export default function Settings({
+  selectedInstanceId = "petablocks-s2",
   onSettingsSaved,
 }: {
+  selectedInstanceId?: string;
   onSettingsSaved?: (settings: LauncherSettings) => void;
 }) {
-  const instance = INSTANCES[0];
+  const instance =
+    INSTANCES.find((i) => i.id === selectedInstanceId) ?? INSTANCES[0];
   const [settings, setSettings] = useState<LauncherSettings>({
     memoryMb: 6144,
     customJavaPath: null,
@@ -356,9 +359,9 @@ export default function Settings({
               <Server size={18} />
             </div>
             <div>
-              <div className="text-sm font-bold">Auto-Connect to `s2.petablocks.com` on Launch</div>
+              <div className="text-sm font-bold">Auto-Connect to `{instance.serverAddress}` on Launch</div>
               <div className="text-xs text-pb-muted">
-                Passes `--quickPlayMultiplayer s2.petablocks.com:25565` so you join the server directly.
+                Passes `--quickPlayMultiplayer {instance.serverAddress}` so you join {instance.name} directly.
               </div>
             </div>
           </div>

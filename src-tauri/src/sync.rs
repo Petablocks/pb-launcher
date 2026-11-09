@@ -587,6 +587,15 @@ pub async fn fetch_manifest(
         if !candidate_urls.contains(&s2_fallback) {
             candidate_urls.push(s2_fallback);
         }
+        let s2_dist = "https://github.com/Petablocks/pb-modpacks/releases/latest/download/launcher-manifest.json".to_string();
+        if !candidate_urls.contains(&s2_dist) {
+            candidate_urls.push(s2_dist);
+        }
+    } else if instance_id == "petablocks-create2" {
+        let c2_fallback = "https://github.com/Petablocks/pb-modpacks/releases/latest/download/launcher-manifest-create2.json".to_string();
+        if !candidate_urls.contains(&c2_fallback) {
+            candidate_urls.push(c2_fallback);
+        }
     }
 
     for url in &candidate_urls {
@@ -1160,11 +1169,33 @@ async fn apply_mrpack_overrides(
             "https://github.com/Petablocks/petablocks-modpack-s2/releases/latest/download/PETABLOCKS-Season-2-{}.mrpack",
             manifest.version
         );
+        let s2_dist_gh = format!(
+            "https://github.com/Petablocks/pb-modpacks/releases/latest/download/PETABLOCKS-Season-2-{}.mrpack",
+            manifest.version
+        );
         if !candidate_urls.contains(&s2_gh) {
             candidate_urls.push(s2_gh);
         }
         if !candidate_urls.contains(&s2_modpack_gh) {
             candidate_urls.push(s2_modpack_gh);
+        }
+        if !candidate_urls.contains(&s2_dist_gh) {
+            candidate_urls.push(s2_dist_gh);
+        }
+    } else if instance_id == "petablocks-create2" {
+        let c2_gh = format!(
+            "https://github.com/Petablocks/pb-launcher/releases/latest/download/PETABLOCKS-Create-2-{}.mrpack",
+            manifest.version
+        );
+        let c2_dist_gh = format!(
+            "https://github.com/Petablocks/pb-modpacks/releases/latest/download/PETABLOCKS-Create-2-{}.mrpack",
+            manifest.version
+        );
+        if !candidate_urls.contains(&c2_gh) {
+            candidate_urls.push(c2_gh);
+        }
+        if !candidate_urls.contains(&c2_dist_gh) {
+            candidate_urls.push(c2_dist_gh);
         }
     }
 

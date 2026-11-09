@@ -1,18 +1,17 @@
 # PETABLOCKS Launcher
 
-**Version**: `v1.12.1` - Official Minecraft launcher for the [PETABLOCKS](https://petablocks.com) network.
+**Version**: `v1.13.0` - Official Minecraft launcher for the [PETABLOCKS](https://petablocks.com) network.
 
 Built with Tauri v2 (Rust) + React 19 + TypeScript + Tailwind CSS v4, using the official `petablocks-brand` design tokens.
 
 ## Status
-All phases complete: frameless transparent startup splash screen with automatic update installation, **Release Update Channel selector (`Stable` vs `Staging / Pre-release`)**, Microsoft sign-in with full-body 3D skin preview and playtime tracking, **Discord Account Linking & Closed Beta Role Gate (`my.petablocks.com` integration)**, GitHub Releases manifest sync engine, Shaders & Resource Packs manager (`config/iris.properties` integration), Adoptium Java 21 auto-installer, NeoForge 21.1.259 launch engine with auto-hide/restore while playing, native TCP Server List Ping, Discord Rich Presence, Screenshots gallery, News & optional Buy Me a Coffee hosting support link, Crash Report diagnostics, and **direct in-launcher GitHub Issue & Crash Report Gateway (`Petablocks/pb-launcher` & `Petablocks/petablocks-modpack-s2` routing)**.
+All phases complete: frameless transparent startup splash screen with automatic update installation, **Multi-Modpack Support (Season 2 & Create 2)** with shared vanilla & NeoForge asset caching, **Decoupled Modpack Distribution (`Petablocks/pb-modpacks`)**, **Unified Active Instance Context across all launcher tabs with compact switcher pill**, **Release Update Channel selector (`Stable` vs `Staging / Pre-release`)**, Microsoft sign-in with full-body 3D skin preview and playtime tracking, **Discord Account Linking & Access Policies**, Shaders & Resource Packs manager, Adoptium Java 21 auto-installer, NeoForge launch engine, native TCP Server List Ping, Discord Rich Presence, Screenshots gallery, News, Crash Report diagnostics, and **direct in-launcher GitHub Issue & Crash Report Gateway**.
 
-## Season 2 instance
-| Property | Value |
-| --- | --- |
-| Server | `s2.petablocks.com` |
-| Minecraft / Loader | `1.21.1` / NeoForge `21.1.259` |
-| Manifest (source of truth) | GitHub Releases of `Petablocks/petablocks-modpack-s2` (`launcher-manifest.json`) |
+## Supported Instances
+| Instance | Server | Minecraft / Loader | Manifest Distribution |
+| --- | --- | --- | --- |
+| **PETABLOCKS Season 2** | `s2.petablocks.com` | `1.21.1` / NeoForge `21.1.259` | `launcher-manifest.json` via `Petablocks/pb-modpacks` |
+| **PETABLOCKS Create 2** | `create2.petablocks.com` | `1.21.1` / NeoForge `21.1.233` | `launcher-manifest-create2.json` via `Petablocks/pb-modpacks` |
 
 ## Development
 Requires Node 20+, Rust (stable, MSVC) and the Visual Studio C++ Build Tools.

@@ -14,9 +14,19 @@ import {
 } from "../sync";
 import { inTauri } from "../auth";
 import { ModrinthLogo } from "../components/BrandIcons";
+import InstanceSelector from "../components/InstanceSelector";
 
-export default function Mods() {
-  const instance = INSTANCES[0];
+interface ModsProps {
+  selectedInstanceId?: string;
+  onSelectInstance?: (id: string) => void;
+}
+
+export default function Mods({
+  selectedInstanceId = "petablocks-s2",
+  onSelectInstance,
+}: ModsProps) {
+  const instance =
+    INSTANCES.find((i) => i.id === selectedInstanceId) ?? INSTANCES[0];
   const [manifest, setManifest] = useState<LauncherManifest | null>(null);
   const [state, setState] = useState<InstanceState>({ installedVersion: null, disabledMods: [] });
   const [customMods, setCustomMods] = useState<CustomModFile[]>([]);
@@ -46,7 +56,7 @@ export default function Mods() {
   useEffect(() => {
     loadAll();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [instance.id, instance.manifestUrl]);
 
   async function toggleMod(slug: string, currentlyEnabled: boolean) {
     try {
@@ -87,9 +97,17 @@ export default function Mods() {
     <div className="mx-auto max-w-4xl">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-extrabold">Mod Manager</h1>
+          <div className="flex items-center gap-3">
+            <h1 className="text-2xl font-extrabold">Mod Manager</h1>
+            {onSelectInstance && (
+              <InstanceSelector
+                selectedInstanceId={instance.id}
+                onSelectInstance={onSelectInstance}
+              />
+            )}
+          </div>
           <p className="mt-1 text-sm text-pb-muted">
-            Customize optional client mods or drop your own client-side jars into the protected custom folder.
+            Managing mods for <strong className="text-white">{instance.name}</strong>. Customize optional client mods or drop custom jars.
           </p>
         </div>
         <div className="flex items-center gap-2">

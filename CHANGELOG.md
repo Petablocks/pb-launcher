@@ -3,6 +3,20 @@
 All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.13.0] - 2026-11-09
+### Added
+- **Multi-Modpack Support (PETABLOCKS Create 2)**:
+  - Enabled **PETABLOCKS Create 2** (`create2.petablocks.com` / NeoForge 21.1.233 / MC 1.21.1) as a playable instance alongside Season 2.
+  - Added dedicated authoring repository `Petablocks/petablocks-modpack-create2` and decoupled public distribution stream `Petablocks/pb-modpacks`.
+  - Added instance sandboxing: per-instance isolation for `mods/`, `config/`, `shaderpacks/`, `resourcepacks/`, `screenshots/`, and `options.txt`.
+- **Unified Active Instance Context & Compact Switcher Pill**:
+  - Lifted active instance selection to top-level app state, automatically synchronizing across all tabs (**Play**, **Mods**, **Shaders & Resource Packs**, **Screenshots**, **Feedback**, and **Settings**).
+  - Added a compact instance switcher pill to tab headers so players can switch packs with a single click from any tab.
+  - Dynamically wired **Feedback** and **Crash Reports** to route bug reports to their respective modpack repository (`petablocks-modpack-s2` or `petablocks-modpack-create2`).
+- **Per-Instance Access Policies**:
+  - Added `accessPolicy` tiers (`public`, `discord_linked`, `beta_role`, `patreon_role`) in `src/instances.ts`.
+  - Dynamically configured direct connect server descriptions in Settings based on the currently selected instance.
+
 ## [1.12.1] - 2026-11-09
 ### Changed
 - **Authenticated Discord Account Linking**:

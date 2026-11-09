@@ -10,9 +10,19 @@ import {
 } from "../community";
 import { formatBytes } from "../sync";
 import { inTauri } from "../auth";
+import InstanceSelector from "../components/InstanceSelector";
 
-export default function Screenshots() {
-  const instance = INSTANCES[0];
+interface ScreenshotsProps {
+  selectedInstanceId?: string;
+  onSelectInstance?: (id: string) => void;
+}
+
+export default function Screenshots({
+  selectedInstanceId = "petablocks-s2",
+  onSelectInstance,
+}: ScreenshotsProps) {
+  const instance =
+    INSTANCES.find((i) => i.id === selectedInstanceId) ?? INSTANCES[0];
   const [items, setItems] = useState<ScreenshotItem[]>([]);
   const [selected, setSelected] = useState<ScreenshotItem | null>(null);
   const [loading, setLoading] = useState(true);
@@ -37,7 +47,7 @@ export default function Screenshots() {
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [instance.id]);
 
   async function openFolder() {
     setError(null);
@@ -52,9 +62,17 @@ export default function Screenshots() {
     <div className="mx-auto max-w-4xl">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-extrabold">Screenshots Gallery</h1>
+          <div className="flex items-center gap-3">
+            <h1 className="text-2xl font-extrabold">Screenshots Gallery</h1>
+            {onSelectInstance && (
+              <InstanceSelector
+                selectedInstanceId={instance.id}
+                onSelectInstance={onSelectInstance}
+              />
+            )}
+          </div>
           <p className="mt-1 text-sm text-pb-muted">
-            View and share your in-game captures from {instance.name}.
+            View and share your in-game captures from <strong className="text-white">{instance.name}</strong>.
           </p>
         </div>
         <div className="flex items-center gap-2">

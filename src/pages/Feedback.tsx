@@ -46,6 +46,13 @@ const REPORT_TARGETS: {
     desc: "In-game mods, recipes, shaders, keybinds, or Season 2 crashes",
     instanceId: "petablocks-s2",
   },
+  {
+    id: "petablocks-create2",
+    label: "PETABLOCKS Create 2 Modpack",
+    repo: "Petablocks/petablocks-modpack-create2",
+    desc: "In-game mods, recipes, trains, kinetics, or Create 2 crashes",
+    instanceId: "petablocks-create2",
+  },
 ];
 
 const CATEGORIES: {

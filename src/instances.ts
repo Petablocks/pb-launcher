@@ -1,3 +1,5 @@
+export type AccessPolicy = "public" | "discord_linked" | "beta_role" | "patreon_role";
+
 export interface Instance {
   id: string;
   name: string;
@@ -15,6 +17,7 @@ export interface Instance {
   badge?: string;
   playLabel?: string;
   changelogUrl?: string;
+  accessPolicy?: AccessPolicy;
 }
 
 export const INSTANCES: Instance[] = [
@@ -37,6 +40,7 @@ export const INSTANCES: Instance[] = [
     description: "The official Create SMP season 2 modpack featuring train logistics, aeronautics & community industry.",
     badge: "Official Season",
     playLabel: "Play Season 2",
+    accessPolicy: "beta_role",
   },
   {
     id: "petablocks-create2",
@@ -49,12 +53,13 @@ export const INSTANCES: Instance[] = [
     loaderVersion: "21.1.233",
     manifestUrl:
       "https://github.com/Petablocks/pb-launcher/releases/latest/download/launcher-manifest-create2.json",
-    status: "coming_soon",
+    status: "playable",
     logoImage: "/cards/logo-create2.png",
     bgImage: "/cards/bg-create2.jpg",
-    description: "The beloved Create 2 network server. Coming soon directly to the launcher!",
+    description: "The beloved Create 2 network server. Automated industry, steam power, and community builds.",
     badge: "Live Server",
-    playLabel: "Coming Soon",
+    playLabel: "Play Create 2",
+    accessPolicy: "public",
   },
   {
     id: "petablocks-hungergames",

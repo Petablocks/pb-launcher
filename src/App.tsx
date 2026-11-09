@@ -45,6 +45,19 @@ const NAV: { id: Tab; label: string; icon: typeof Gamepad2; badge?: string }[] =
 
 export default function App() {
   const [tab, setTab] = useState<Tab>("play");
+  const [selectedInstanceId, setSelectedInstanceId] = useState<string>(() => {
+    return localStorage.getItem("pb_active_instance") || "petablocks-s2";
+  });
+
+  function handleSelectInstance(id: string) {
+    setSelectedInstanceId(id);
+    try {
+      localStorage.setItem("pb_active_instance", id);
+    } catch {
+      // ignore
+    }
+  }
+
   const [session, setSession] = useState<Session | null>(null);
   const [discordStatus, setDiscordStatus] = useState<DiscordLinkStatus | null>(null);
   const [updateInfo, setUpdateInfo] = useState<LauncherUpdateInfo | null>(null);
@@ -254,19 +267,31 @@ export default function App() {
                 onSession={setSession}
                 discordStatus={discordStatus}
                 onDiscordStatus={setDiscordStatus}
+                selectedInstanceId={selectedInstanceId}
+                onSelectInstance={handleSelectInstance}
               />
             ) : tab === "mods" ? (
-              <Mods />
+              <Mods
+                selectedInstanceId={selectedInstanceId}
+                onSelectInstance={handleSelectInstance}
+              />
             ) : tab === "packs" ? (
-              <Packs />
+              <Packs
+                selectedInstanceId={selectedInstanceId}
+                onSelectInstance={handleSelectInstance}
+              />
             ) : tab === "screenshots" ? (
-              <Screenshots />
+              <Screenshots
+                selectedInstanceId={selectedInstanceId}
+                onSelectInstance={handleSelectInstance}
+              />
             ) : tab === "news" ? (
               <News />
             ) : tab === "feedback" ? (
               <Feedback session={session} />
             ) : (
               <Settings
+                selectedInstanceId={selectedInstanceId}
                 onSettingsSaved={(s) => {
                   setUpdateChannel(s.updateChannel ?? "stable");
                   runUpdateCheck();

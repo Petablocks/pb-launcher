@@ -55,10 +55,21 @@ interface Props {
   onSession: (s: Session | null) => void;
   discordStatus: DiscordLinkStatus | null;
   onDiscordStatus: (status: DiscordLinkStatus | null) => void;
+  selectedInstanceId?: string;
+  onSelectInstance?: (id: string) => void;
 }
 
-export default function Home({ session, onSession, discordStatus, onDiscordStatus }: Props) {
-  const [selectedId, setSelectedId] = useState<string>("petablocks-s2");
+export default function Home({
+  session,
+  onSession,
+  discordStatus,
+  onDiscordStatus,
+  selectedInstanceId,
+  onSelectInstance,
+}: Props) {
+  const [internalSelectedId, setInternalSelectedId] = useState<string>("petablocks-s2");
+  const selectedId = selectedInstanceId ?? internalSelectedId;
+  const setSelectedId = onSelectInstance ?? setInternalSelectedId;
   const selectedInstance = INSTANCES.find((i) => i.id === selectedId) ?? INSTANCES[0];
 
   // Server ping statuses for all instances

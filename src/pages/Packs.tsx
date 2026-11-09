@@ -17,9 +17,19 @@ import {
   setPackEnabled,
 } from "../sync";
 import { inTauri } from "../auth";
+import InstanceSelector from "../components/InstanceSelector";
 
-export default function Packs() {
-  const instance = INSTANCES[0];
+interface PacksProps {
+  selectedInstanceId?: string;
+  onSelectInstance?: (id: string) => void;
+}
+
+export default function Packs({
+  selectedInstanceId = "petablocks-s2",
+  onSelectInstance,
+}: PacksProps) {
+  const instance =
+    INSTANCES.find((i) => i.id === selectedInstanceId) ?? INSTANCES[0];
   const [packs, setPacks] = useState<PackEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -77,9 +87,17 @@ export default function Packs() {
     <div className="mx-auto max-w-3xl space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-extrabold">Shaders & Resource Packs</h1>
+          <div className="flex items-center gap-3">
+            <h1 className="text-2xl font-extrabold">Shaders & Resource Packs</h1>
+            {onSelectInstance && (
+              <InstanceSelector
+                selectedInstanceId={instance.id}
+                onSelectInstance={onSelectInstance}
+              />
+            )}
+          </div>
           <p className="mt-1 text-xs text-pb-muted">
-            Switch active Iris shaderpacks (like Complementary Shaders) and manage resource packs for {instance.name}.
+            Switch active Iris shaderpacks and manage resource packs for <strong className="text-white">{instance.name}</strong>.
           </p>
         </div>
 
