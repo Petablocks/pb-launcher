@@ -145,13 +145,19 @@ export default function AccountCard({
 
   async function handleOneClickDiscordOAuth() {
     if (!session) return;
-    const url = `https://my.petablocks.com/api/public/oauth/discord?mc_uuid=${encodeURIComponent(
-      session.profile.uuid
-    )}&mc_username=${encodeURIComponent(session.profile.name)}&returnTo=${encodeURIComponent(
-      "/hub"
-    )}`;
-    if (inTauri) openUrl(url).catch(() => {});
-    else window.open(url, "_blank");
+    setGeneratingCode(true);
+    setError(null);
+    try {
+      const res = await requestDiscordLinkCode(session.profile.uuid, session.profile.name);
+      setGeneratedCode(res.code);
+      const url = res.oauthUrl || "https://my.petablocks.com/link";
+      if (inTauri) openUrl(url).catch(() => {});
+      else window.open(url, "_blank");
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setGeneratingCode(false);
+    }
   }
 
   async function handleGenerateLinkCode() {

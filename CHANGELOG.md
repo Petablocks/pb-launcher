@@ -3,6 +3,11 @@
 All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.12.1] - 2026-11-09
+### Changed
+- **Authenticated Discord Account Linking**:
+  - Updated in-launcher Discord account linking and status checks to authenticate with your active verified Minecraft session before generating a link code or opening the one-click browser link.
+
 ## [1.12.0] - 2026-11-08
 ### Added
 - **Release Update Channel Selector (`Stable` vs `Staging / Pre-release`)**:

@@ -107,8 +107,19 @@ pub async fn check_discord_link(uuid: &str) -> Result<DiscordLinkStatus, String>
         return Err("Invalid player UUID.".into());
     }
     let url = format!("{PB_AUTH_BASE_URL}/api/public/launcher/status/{clean_uuid}");
-    let res = http_client()
-        .get(&url)
+    let mut req = http_client().get(&url);
+    if let Some((profile, mc_token)) = crate::auth::get_active_mc_session() {
+        let req_hex: String = clean_uuid.chars().filter(|c| c.is_ascii_hexdigit()).collect();
+        let prof_hex: String = profile
+            .uuid
+            .chars()
+            .filter(|c| c.is_ascii_hexdigit())
+            .collect();
+        if req_hex.eq_ignore_ascii_case(&prof_hex) && !mc_token.is_empty() {
+            req = req.bearer_auth(mc_token);
+        }
+    }
+    let res = req
         .send()
         .await
         .map_err(|e| format!("Could not reach my.petablocks.com: {e}"))?;
@@ -125,9 +136,30 @@ pub async fn request_discord_link_code(
     username: &str,
 ) -> Result<LauncherLinkCodeResponse, String> {
     let url = format!("{PB_AUTH_BASE_URL}/api/public/launcher/link-code");
-    let res = http_client()
+    let mut req = http_client()
         .post(&url)
-        .json(&json!({ "uuid": uuid, "username": username }))
+        .json(&json!({ "uuid": uuid, "username": username }));
+
+    // Attach the active in-memory Minecraft access token so my.petablocks.com can
+    // cryptographically verify ownership of the Minecraft profile before issuing a link code
+    // or signed Discord OAuth URL (closes pb-launcher#1 / pb-auth#11 / pb-auth#12).
+    if let Some((profile, mc_token)) = crate::auth::get_active_mc_session() {
+        let clean_req: String = uuid.chars().filter(|c| c.is_ascii_hexdigit()).collect();
+        let clean_prof: String = profile
+            .uuid
+            .chars()
+            .filter(|c| c.is_ascii_hexdigit())
+            .collect();
+        if clean_req.eq_ignore_ascii_case(&clean_prof) && !mc_token.is_empty() {
+            req = req.bearer_auth(mc_token);
+        } else {
+            return Err("Please sign in with your Microsoft account before linking Discord.".into());
+        }
+    } else {
+        return Err("Please sign in with your Microsoft account before linking Discord.".into());
+    }
+
+    let res = req
         .send()
         .await
         .map_err(|e| format!("Could not reach my.petablocks.com: {e}"))?;
@@ -304,7 +336,13 @@ pub async fn submit_crash_webhook(
 
     let client = http_client();
     let gateway_url = format!("{PB_AUTH_BASE_URL}/api/public/launcher/report");
-    if let Ok(res) = client.post(&gateway_url).json(&gateway_payload).send().await {
+    let mut gateway_req = client.post(&gateway_url).json(&gateway_payload);
+    if let Some((_, mc_token)) = crate::auth::get_active_mc_session() {
+        if !mc_token.is_empty() {
+            gateway_req = gateway_req.bearer_auth(mc_token);
+        }
+    }
+    if let Ok(res) = gateway_req.send().await {
         let status = res.status();
         if let Ok(body) = res.json::<GatewayReportResponse>().await {
             if status.is_success() && body.ok.unwrap_or(false) {
@@ -415,7 +453,14 @@ pub async fn submit_beta_feedback(
     let gateway_url = format!("{PB_AUTH_BASE_URL}/api/public/launcher/report");
     let mut gateway_err: Option<String> = None;
 
-    if let Ok(res) = client.post(&gateway_url).json(&gateway_payload).send().await {
+    let mut gateway_req = client.post(&gateway_url).json(&gateway_payload);
+    if let Some((_, mc_token)) = crate::auth::get_active_mc_session() {
+        if !mc_token.is_empty() {
+            gateway_req = gateway_req.bearer_auth(mc_token);
+        }
+    }
+
+    if let Ok(res) = gateway_req.send().await {
         let status = res.status();
         if let Ok(body) = res.json::<GatewayReportResponse>().await {
             if status.is_success() && body.ok.unwrap_or(false) {
