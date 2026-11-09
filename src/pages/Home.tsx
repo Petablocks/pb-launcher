@@ -136,6 +136,7 @@ export default function Home({
   // Update manifest and sync state when instance changes
   useEffect(() => {
     if (!selectedInstance.manifestUrl) return;
+    setManifest(null);
     getSyncState(selectedInstance.id)
       .then((st) => {
         setSyncState(st);
@@ -144,7 +145,9 @@ export default function Home({
       .catch(() => {});
     if (inTauri) {
       getManifest(selectedInstance.id, selectedInstance.manifestUrl)
-        .then(setManifest)
+        .then((m) => {
+          setManifest(m);
+        })
         .catch(() => {});
     }
   }, [selectedInstance.id, selectedInstance.manifestUrl]);
