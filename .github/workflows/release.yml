@@ -61,3 +61,21 @@ jobs:
           releaseBody: "Official PETABLOCKS Launcher release. Download the `.exe` installer below."
           releaseDraft: false
           prerelease: ${{ contains(github.ref_name, '-') }}
+
+      - name: Carry forward modpack manifests and mrpacks to new release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          echo "Carrying forward modpack bundles to $TAG..."
+          # Download public manifests and mrpacks from pb-modpacks
+          gh release download s2-v0.22.0 --repo Petablocks/pb-modpacks -p "PETABLOCKS-Season-2-0.22.0.mrpack" -p "launcher-manifest.json" --clobber || true
+          gh release download create2-v1.4.1 --repo Petablocks/pb-modpacks -p "PETABLOCKS-Create-2-1.4.1.mrpack" -p "launcher-manifest-create2.json" --clobber || true
+          # Upload them to this new release so releases/latest/download always has them
+          for f in PETABLOCKS-Season-2-*.mrpack PETABLOCKS-Create-2-*.mrpack launcher-manifest*.json; do
+            if [ -f "$f" ]; then
+              echo "Uploading $f to $TAG..."
+              gh release upload "$TAG" "$f" --clobber || true
+            fi
+          done
