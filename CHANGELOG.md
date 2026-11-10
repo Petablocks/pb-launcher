@@ -3,6 +3,13 @@
 All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.14.1] - 2026-11-10
+### Fixed
+- **Modpack Overrides Download Resolution**:
+  - Added direct release tag download fallbacks (`pb-modpacks/releases/download/s2-v{version}/...` and `pb-modpacks/releases/download/create2-v{version}/...`) in `apply_mrpack_overrides`.
+  - Prevented launcher releases without bundled `.mrpack` assets from breaking modpack downloads when pointing to GitHub's `/releases/latest/` endpoint.
+  - Replaced private repository manifest candidate URLs with public distribution endpoints (`pb-modpacks` and `pb-launcher`).
+
 ## [1.14.0] - 2026-11-09
 ### Added
 - **Live Server Status & Online Player Counters**:

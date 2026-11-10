@@ -583,18 +583,22 @@ pub async fn fetch_manifest(
         candidate_urls.push(trimmed.to_string());
     }
     if instance_id == "petablocks-s2" {
-        let s2_fallback = "https://github.com/Petablocks/petablocks-modpack-s2/releases/latest/download/launcher-manifest.json".to_string();
-        if !candidate_urls.contains(&s2_fallback) {
-            candidate_urls.push(s2_fallback);
-        }
         let s2_dist = "https://github.com/Petablocks/pb-modpacks/releases/latest/download/launcher-manifest.json".to_string();
         if !candidate_urls.contains(&s2_dist) {
             candidate_urls.push(s2_dist);
         }
+        let s2_launcher = "https://github.com/Petablocks/pb-launcher/releases/latest/download/launcher-manifest.json".to_string();
+        if !candidate_urls.contains(&s2_launcher) {
+            candidate_urls.push(s2_launcher);
+        }
     } else if instance_id == "petablocks-create2" {
-        let c2_fallback = "https://github.com/Petablocks/pb-modpacks/releases/latest/download/launcher-manifest-create2.json".to_string();
-        if !candidate_urls.contains(&c2_fallback) {
-            candidate_urls.push(c2_fallback);
+        let c2_dist = "https://github.com/Petablocks/pb-modpacks/releases/latest/download/launcher-manifest-create2.json".to_string();
+        if !candidate_urls.contains(&c2_dist) {
+            candidate_urls.push(c2_dist);
+        }
+        let c2_launcher = "https://github.com/Petablocks/pb-launcher/releases/latest/download/launcher-manifest-create2.json".to_string();
+        if !candidate_urls.contains(&c2_launcher) {
+            candidate_urls.push(c2_launcher);
         }
     }
 
@@ -1161,41 +1165,48 @@ async fn apply_mrpack_overrides(
         candidate_urls.push(trimmed.to_string());
     }
     if instance_id == "petablocks-s2" {
+        let s2_dist_tag = format!(
+            "https://github.com/Petablocks/pb-modpacks/releases/download/s2-v{}/PETABLOCKS-Season-2-{}.mrpack",
+            manifest.version, manifest.version
+        );
         let s2_gh = format!(
             "https://github.com/Petablocks/pb-launcher/releases/latest/download/PETABLOCKS-Season-2-{}.mrpack",
-            manifest.version
-        );
-        let s2_modpack_gh = format!(
-            "https://github.com/Petablocks/petablocks-modpack-s2/releases/latest/download/PETABLOCKS-Season-2-{}.mrpack",
             manifest.version
         );
         let s2_dist_gh = format!(
             "https://github.com/Petablocks/pb-modpacks/releases/latest/download/PETABLOCKS-Season-2-{}.mrpack",
             manifest.version
         );
+        if !candidate_urls.contains(&s2_dist_tag) {
+            candidate_urls.push(s2_dist_tag);
+        }
         if !candidate_urls.contains(&s2_gh) {
             candidate_urls.push(s2_gh);
-        }
-        if !candidate_urls.contains(&s2_modpack_gh) {
-            candidate_urls.push(s2_modpack_gh);
         }
         if !candidate_urls.contains(&s2_dist_gh) {
             candidate_urls.push(s2_dist_gh);
         }
     } else if instance_id == "petablocks-create2" {
-        let c2_gh = format!(
-            "https://github.com/Petablocks/pb-launcher/releases/latest/download/PETABLOCKS-Create-2-{}.mrpack",
-            manifest.version
+        let c2_dist_tag = format!(
+            "https://github.com/Petablocks/pb-modpacks/releases/download/create2-v{}/PETABLOCKS-Create-2-{}.mrpack",
+            manifest.version, manifest.version
         );
         let c2_dist_gh = format!(
             "https://github.com/Petablocks/pb-modpacks/releases/latest/download/PETABLOCKS-Create-2-{}.mrpack",
             manifest.version
         );
-        if !candidate_urls.contains(&c2_gh) {
-            candidate_urls.push(c2_gh);
+        let c2_gh = format!(
+            "https://github.com/Petablocks/pb-launcher/releases/latest/download/PETABLOCKS-Create-2-{}.mrpack",
+            manifest.version
+        );
+        if !candidate_urls.contains(&c2_dist_tag) {
+            candidate_urls.push(c2_dist_tag);
         }
         if !candidate_urls.contains(&c2_dist_gh) {
             candidate_urls.push(c2_dist_gh);
+        }
+        if !candidate_urls.contains(&c2_gh) {
+            candidate_urls.push(c2_gh);
         }
     }
 
