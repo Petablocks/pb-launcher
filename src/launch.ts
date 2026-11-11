@@ -26,6 +26,7 @@ export interface LaunchRequest {
   neoforgeVersion: string;
   serverAddress: string;
   session: Session;
+  instanceName?: string;
 }
 
 export interface GameLogLine {

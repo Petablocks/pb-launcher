@@ -97,3 +97,8 @@ export const INSTANCES: Instance[] = [
     playLabel: "Coming Soon",
   },
 ];
+
+/** Whether launching this instance requires a linked Discord account with guild membership. */
+export function requiresDiscord(inst: Instance): boolean {
+  return (inst.accessPolicy ?? "beta_role") !== "public";
+}

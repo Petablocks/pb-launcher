@@ -33,6 +33,31 @@ pub struct LaunchRequest {
     pub neoforge_version: String,
     pub server_address: String,
     pub session: Session,
+    /// Display name used for Discord Rich Presence (falls back to a generic label).
+    #[serde(default)]
+    pub instance_name: Option<String>,
+}
+
+/// Instances whose access policy is `public` launch without a Discord link / guild check.
+/// Every other instance keeps the Closed Beta gate.
+fn instance_requires_discord(instance_id: &str) -> bool {
+    !matches!(instance_id, "petablocks-create2")
+}
+
+/// Sanitised Rich Presence headline for the instance being played.
+fn rpc_details(instance_name: Option<&str>) -> String {
+    let name: String = instance_name
+        .unwrap_or("")
+        .chars()
+        .filter(|c| !c.is_control())
+        .take(64)
+        .collect();
+    let name = name.trim();
+    if name.is_empty() {
+        "Playing PETABLOCKS".to_string()
+    } else {
+        format!("Playing {name}")
+    }
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -487,12 +512,15 @@ pub async fn launch_game(app: AppHandle, req: LaunchRequest) -> Result<(), Strin
     }
 
     // 4. Backend enforcement of Closed Beta Discord link & guild membership
-    if let Ok(discord) = crate::community::check_discord_link(&verified_profile.uuid).await {
-        if !discord.linked || !discord.in_guild {
-            return Err(
-                "Launch blocked: Please link your Discord account and join the PETABLOCKS Discord server to play."
-                    .into(),
-            );
+    //    (skipped for instances whose access policy is public)
+    if instance_requires_discord(&req.instance_id) {
+        if let Ok(discord) = crate::community::check_discord_link(&verified_profile.uuid).await {
+            if !discord.linked || !discord.in_guild {
+                return Err(
+                    "Launch blocked: Please link your Discord account and join the PETABLOCKS Discord server to play."
+                        .into(),
+                );
+            }
         }
     }
 
@@ -595,7 +623,6 @@ pub async fn launch_game(app: AppHandle, req: LaunchRequest) -> Result<(), Strin
     }
 
     let _ = app.emit("launch-status", "Starting Minecraft (NeoForge)...");
-    let _ = app.emit("game-state", "running");
 
     let mut mc_cmd = TokioCommand::new(&java_exe);
     mc_cmd
@@ -611,6 +638,10 @@ pub async fn launch_game(app: AppHandle, req: LaunchRequest) -> Result<(), Strin
         .spawn()
         .map_err(|e| format!("Failed to spawn Minecraft process: {e}"))?;
 
+    // Only report "running" once the JVM process actually exists, so a failed spawn
+    // can never leave the UI stuck in a running state.
+    let _ = app.emit("game-state", "running");
+
     let game_pid = child.id().unwrap_or_else(std::process::id);
     #[cfg(windows)]
     assign_child_to_job_object(game_pid);
@@ -620,6 +651,8 @@ pub async fn launch_game(app: AppHandle, req: LaunchRequest) -> Result<(), Strin
     let _ = app.emit("playtime-updated", (&req.instance_id, &initial_state));
 
     let server_addr = req.server_address.clone();
+    let rpc_headline = rpc_details(req.instance_name.as_deref());
+    let rpc_headline_tick = rpc_headline.clone();
     let rpc_start = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_secs())
@@ -627,7 +660,7 @@ pub async fn launch_game(app: AppHandle, req: LaunchRequest) -> Result<(), Strin
 
     // Non-blocking Discord RPC update via background IPC worker
     crate::community::update_discord_rpc_with_pid(
-        "Playing PETABLOCKS Season 2",
+        &rpc_headline,
         &format!("Connected to {server_addr}"),
         game_pid,
         Some(rpc_start),
@@ -665,7 +698,7 @@ pub async fn launch_game(app: AppHandle, req: LaunchRequest) -> Result<(), Strin
                     }
 
                     crate::community::update_discord_rpc_with_pid(
-                        "Playing PETABLOCKS Season 2",
+                        &rpc_headline_tick,
                         &format!("Connected to {server_addr}"),
                         game_pid,
                         Some(rpc_start),
@@ -774,6 +807,16 @@ mod tests {
             "a/b/c/1.0/c-1.0-natives.zip"
         );
         assert!(maven_coord_to_path("bad:coord").is_none());
+    }
+
+    #[test]
+    fn access_policy_and_rpc_headline() {
+        assert!(instance_requires_discord("petablocks-s2"));
+        assert!(!instance_requires_discord("petablocks-create2"));
+        assert!(instance_requires_discord("anything-else"));
+        assert_eq!(rpc_details(Some("PETABLOCKS Create 2")), "Playing PETABLOCKS Create 2");
+        assert_eq!(rpc_details(None), "Playing PETABLOCKS");
+        assert_eq!(rpc_details(Some("  ")), "Playing PETABLOCKS");
     }
 
     #[test]

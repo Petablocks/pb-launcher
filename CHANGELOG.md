@@ -3,6 +3,19 @@
 All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.14.2] - 2026-11-11
+### Fixed
+- **Play launched the wrong modpack**: pressing **Play** or **Update** on a card that was not the selected one launched (or updated) the previously selected instance. Both actions now act on the card that was clicked.
+- **Play buttons hidden at narrow window widths**: between the minimum window width and 1024px the instance grid collapsed to a single column and clipped the logos and Play buttons. The grid now stays two columns and the card footer wraps.
+- **Launch state lost when switching tabs**: the Play tab now stays mounted, so launching / running state, live game logs and crash prompts survive a visit to another tab.
+- **Create 2 required Discord despite being public**: the instance `accessPolicy` is now honoured in both the UI and the launch backend. Season 2 keeps its Closed Beta gate.
+- **Bundled fonts**: Inter and JetBrains Mono are now shipped with the launcher. They were previously requested from Google Fonts, which the app's Content Security Policy blocks, so installed builds fell back to system fonts.
+- **Discord Rich Presence** now shows the instance actually being played instead of always "PETABLOCKS Season 2".
+- **Stuck "Running" state**: the running state is only reported once the Minecraft process has spawned, so a failed spawn no longer leaves the Play button disabled.
+
+### Changed
+- Removed the unused `AccountCard` component (superseded by the sidebar account pill).
+
 ## [1.14.1] - 2026-11-10
 ### Fixed
 - **Modpack Overrides Download Resolution**:

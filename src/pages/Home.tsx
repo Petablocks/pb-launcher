@@ -16,8 +16,7 @@ import {
   X,
   RefreshCw,
 } from "lucide-react";
-import { INSTANCES, Instance } from "../instances";
-import AccountCard from "../components/AccountCard";
+import { INSTANCES, Instance, requiresDiscord } from "../instances";
 import { MinecraftServerIcon } from "../components/MinecraftServerIcon";
 import { InlineMarkdown, parseChangelog } from "./News";
 import { Session, inTauri } from "../auth";
@@ -222,13 +221,16 @@ export default function Home({
     };
   }, [selectedInstance.id]);
 
-  async function handleSync() {
-    if (selectedInstance.status !== "playable" || !selectedInstance.manifestUrl) return;
+  // Both handlers take the instance explicitly: they are invoked in the same click that
+  // changes the selection, so reading `selectedInstance` here would act on the previous card.
+  async function handleSync(inst: Instance = selectedInstance) {
+    if (inst.status !== "playable" || !inst.manifestUrl) return;
     setSyncing(true);
     setSyncError(null);
     try {
-      const next = await syncInstance(selectedInstance.id, selectedInstance.manifestUrl);
+      const next = await syncInstance(inst.id, inst.manifestUrl);
       setSyncState(next);
+      setInstanceStates((prev) => ({ ...prev, [inst.id]: next }));
     } catch (e) {
       setSyncError(String(e));
     } finally {
@@ -236,13 +238,13 @@ export default function Home({
     }
   }
 
-  async function handlePlay() {
-    if (selectedInstance.status !== "playable") return;
+  async function handlePlay(inst: Instance = selectedInstance) {
+    if (inst.status !== "playable") return;
     if (!session || session.offline || !session.access_token) {
       setSyncError("Sign in with a verified Microsoft account owning Minecraft: Java Edition first.");
       return;
     }
-    if (discordStatus && (!discordStatus.linked || !discordStatus.inGuild)) {
+    if (requiresDiscord(inst) && discordStatus && (!discordStatus.linked || !discordStatus.inGuild)) {
       setSyncError("Discord linking and Closed Beta membership required to play.");
       return;
     }
@@ -250,19 +252,21 @@ export default function Home({
     setSyncError(null);
     setLogs([]);
     try {
-      if (selectedInstance.manifestUrl) {
+      if (inst.manifestUrl) {
         setLaunchStatus("Checking modpack updates...");
-        const next = await syncInstance(selectedInstance.id, selectedInstance.manifestUrl);
+        const next = await syncInstance(inst.id, inst.manifestUrl);
         setSyncState(next);
+        setInstanceStates((prev) => ({ ...prev, [inst.id]: next }));
       }
 
       setLaunchStatus("Preparing Java 21 runtime & NeoForge...");
       await launchInstance({
-        instanceId: selectedInstance.id,
-        minecraftVersion: selectedInstance.minecraftVersion,
-        neoforgeVersion: selectedInstance.neoforgeVersion ?? "21.1.259",
-        serverAddress: selectedInstance.serverAddress,
+        instanceId: inst.id,
+        minecraftVersion: inst.minecraftVersion,
+        neoforgeVersion: inst.neoforgeVersion ?? "21.1.259",
+        serverAddress: inst.serverAddress,
         session,
+        instanceName: inst.name,
       });
     } catch (e) {
       setSyncError(String(e));
@@ -327,7 +331,7 @@ export default function Home({
   return (
     <div className="flex h-full flex-col">
       {/* 2x2 Multi-Instance Modpack Grid */}
-      <div className="grid min-h-[500px] flex-1 grid-cols-1 gap-4 lg:grid-cols-2">
+      <div className="grid min-h-[440px] flex-1 grid-cols-2 gap-4">
         {INSTANCES.map((inst) => {
           const isSelected = inst.id === selectedId;
           const status = serverStatuses[inst.id];
@@ -354,9 +358,9 @@ export default function Home({
               <div className="absolute inset-0 bg-gradient-to-r from-[#060a12]/70 via-transparent to-[#060a12]/70" />
 
               {/* Top Meta Header */}
-              <div className="relative z-10 flex items-center justify-between p-5">
+              <div className="relative z-10 flex shrink-0 items-center justify-between gap-2 p-4">
                 <div className="flex items-center gap-2">
-                  <span className="rounded-full border border-white/20 bg-black/60 px-3 py-1 text-[11px] font-extrabold uppercase tracking-wider text-white backdrop-blur-md">
+                  <span className="whitespace-nowrap rounded-full border border-white/20 bg-black/60 px-3 py-1 text-[11px] font-extrabold uppercase tracking-wider text-white backdrop-blur-md">
                     {inst.badge ?? "Instance"}
                   </span>
                   {/* Modpack Update Pill (if playable and update available) */}
@@ -406,18 +410,18 @@ export default function Home({
               </div>
 
               {/* Center Floating Modpack Logo */}
-              <div className="relative z-10 flex flex-1 items-center justify-center p-4">
+              <div className="relative z-10 flex min-h-0 flex-1 items-center justify-center px-4 py-2">
                 <img
                   src={inst.logoImage}
                   alt={inst.name}
-                  className="max-h-24 w-auto object-contain drop-shadow-[0_10px_25px_rgba(0,0,0,0.9)] transition-transform duration-300 group-hover:scale-105"
+                  className="max-h-full min-h-0 w-auto max-w-full object-contain drop-shadow-[0_10px_25px_rgba(0,0,0,0.9)] transition-transform duration-300 group-hover:scale-105"
                   draggable={false}
                 />
               </div>
 
               {/* Bottom Details & Launch Panel */}
-              <div className="relative z-10 border-t border-white/10 bg-black/50 p-4 backdrop-blur-md">
-                <div className="flex items-center justify-between gap-4">
+              <div className="relative z-10 shrink-0 border-t border-white/10 bg-black/50 p-3.5 backdrop-blur-md">
+                <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
                   <div className="flex flex-wrap items-center gap-2.5 text-xs text-pb-muted">
                     <span className="inline-flex items-center gap-1.5 font-semibold text-white/90">
                       <MinecraftServerIcon size={16} />
@@ -472,7 +476,7 @@ export default function Home({
                           onClick={(e) => {
                             e.stopPropagation();
                             setSelectedId(inst.id);
-                            handleSync();
+                            handleSync(inst);
                           }}
                           disabled={syncing || launching || gameRunning}
                           title="Download & Apply Modpack Update"
@@ -486,10 +490,16 @@ export default function Home({
                         onClick={(e) => {
                           e.stopPropagation();
                           setSelectedId(inst.id);
-                          handlePlay();
+                          handlePlay(inst);
                         }}
-                        disabled={!verifiedOnlineSession || !betaDiscordReady || syncing || launching || gameRunning}
-                        className="font-minecraft inline-flex cursor-pointer items-center gap-2 rounded-xl bg-pb-cyan px-6 py-2.5 text-base font-extrabold tracking-wider text-[#031617] shadow-lg shadow-pb-cyan/20 transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
+                        disabled={
+                          !verifiedOnlineSession ||
+                          (requiresDiscord(inst) && !betaDiscordReady) ||
+                          syncing ||
+                          launching ||
+                          gameRunning
+                        }
+                        className="font-minecraft inline-flex cursor-pointer items-center gap-2 whitespace-nowrap rounded-xl bg-pb-cyan px-5 py-2.5 text-sm font-extrabold tracking-wider text-[#031617] shadow-lg shadow-pb-cyan/20 transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
                       >
                         {launching && isSelected ? (
                           <>
@@ -560,7 +570,7 @@ export default function Home({
               <span>Changelog</span>
             </button>
             <button
-              onClick={handleSync}
+              onClick={() => handleSync()}
               disabled={syncing || launching || gameRunning}
               className="inline-flex cursor-pointer items-center gap-1.5 rounded-xl bg-amber-400 px-4 py-2 text-xs font-extrabold text-black shadow-md shadow-amber-400/20 transition hover:bg-amber-300 disabled:opacity-50"
             >

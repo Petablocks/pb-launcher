@@ -261,7 +261,8 @@ export default function App() {
         </nav>
         <div className="flex min-w-0 flex-1 flex-col">
           <main className="min-w-0 flex-1 overflow-y-auto p-6">
-            {tab === "play" ? (
+            {/* Play stays mounted so launch state, game logs and event listeners survive tab switches. */}
+            <div className={tab === "play" ? "h-full" : "hidden"}>
               <Home
                 session={session}
                 onSession={setSession}
@@ -270,7 +271,8 @@ export default function App() {
                 selectedInstanceId={selectedInstanceId}
                 onSelectInstance={handleSelectInstance}
               />
-            ) : tab === "mods" ? (
+            </div>
+            {tab === "play" ? null : tab === "mods" ? (
               <Mods
                 selectedInstanceId={selectedInstanceId}
                 onSelectInstance={handleSelectInstance}
