@@ -11,6 +11,39 @@ const GITHUB_LATEST_RELEASE_API: &str =
 const GITHUB_RELEASES_LIST_API: &str =
     "https://api.github.com/repos/Petablocks/pb-launcher/releases?per_page=10";
 
+/// Base64 Ed25519 public key for release signatures, baked in at build time from the
+/// `PB_UPDATE_PUBLIC_KEY` environment variable. When present, an update is only installed if the
+/// release carries a valid `<installer>.sig`; the SHA-256 published next to the installer is no
+/// longer sufficient on its own, so a tampered release cannot push an update.
+const UPDATE_PUBLIC_KEY: Option<&str> = option_env!("PB_UPDATE_PUBLIC_KEY");
+
+/// Verifies a base64 Ed25519 signature over the installer's lowercase hex SHA-256 digest.
+fn verify_update_signature(
+    public_key_b64: &str,
+    sha256_hex: &str,
+    signature_b64: &str,
+) -> Result<(), String> {
+    use base64::Engine as _;
+    use ed25519_dalek::{Signature, VerifyingKey};
+
+    let b64 = base64::engine::general_purpose::STANDARD;
+    let key_bytes: [u8; 32] = b64
+        .decode(public_key_b64.trim())
+        .ok()
+        .and_then(|b| b.try_into().ok())
+        .ok_or("Update signing key is malformed.")?;
+    let key = VerifyingKey::from_bytes(&key_bytes)
+        .map_err(|_| "Update signing key is invalid.".to_string())?;
+    let sig_bytes: [u8; 64] = b64
+        .decode(signature_b64.trim())
+        .ok()
+        .and_then(|b| b.try_into().ok())
+        .ok_or("Update signature is malformed.")?;
+    let message = sha256_hex.trim().to_ascii_lowercase();
+    key.verify_strict(message.as_bytes(), &Signature::from_bytes(&sig_bytes))
+        .map_err(|_| "Update signature does not match this release.".to_string())
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LauncherUpdateInfo {
@@ -93,6 +126,8 @@ struct VerifiedInstallerAsset {
     latest_version: String,
     download_url: String,
     sha256: Option<String>,
+    /// URL of the detached `<installer>.sig` asset, when the release has one.
+    signature_url: Option<String>,
     release_url: String,
     notes: String,
     prerelease: bool,
@@ -152,17 +187,25 @@ async fn fetch_latest_installer_asset(
     let mut download_url: Option<String> = None;
     let mut sha256: Option<String> = None;
     let mut companion_sha_url: Option<String> = None;
+    let mut signature_url: Option<String> = None;
 
     if let Some(assets) = val["assets"].as_array() {
         // Prefer the exact Windows x64 NSIS setup asset (`_x64-setup.exe` or `-setup.exe`)
         for asset in assets {
             let name = asset["name"].as_str().unwrap_or("");
+            if name.ends_with("-setup.exe.sig") {
+                if let Some(u) = asset["browser_download_url"].as_str() {
+                    signature_url = Some(u.to_string());
+                }
+            }
             if name.ends_with(".sha256") {
                 if let Some(u) = asset["browser_download_url"].as_str() {
                     companion_sha_url = Some(u.to_string());
                 }
             }
-            if name.ends_with("_x64-setup.exe") || name.ends_with("-setup.exe") {
+            if download_url.is_none()
+                && (name.ends_with("_x64-setup.exe") || name.ends_with("-setup.exe"))
+            {
                 if let Some(url) = asset["browser_download_url"].as_str() {
                     download_url = Some(url.to_string());
                     if let Some(digest) = asset["digest"].as_str() {
@@ -172,7 +215,6 @@ async fn fetch_latest_installer_asset(
                             }
                         }
                     }
-                    break;
                 }
             }
         }
@@ -197,6 +239,7 @@ async fn fetch_latest_installer_asset(
             latest_version,
             download_url: String::new(),
             sha256: None,
+            signature_url: None,
             release_url,
             notes,
             prerelease,
@@ -207,6 +250,7 @@ async fn fetch_latest_installer_asset(
         latest_version,
         download_url,
         sha256,
+        signature_url,
         release_url,
         notes,
         prerelease,
@@ -295,6 +339,24 @@ pub async fn install_update(
         "Update blocked: GitHub release asset is missing a verified SHA-256 digest.",
     )?;
 
+    if let Some(public_key) = UPDATE_PUBLIC_KEY.filter(|k| !k.trim().is_empty()) {
+        let sig_url = asset
+            .signature_url
+            .filter(|u| u.starts_with("https://github.com/Petablocks/pb-launcher/releases/download/"))
+            .ok_or("Update blocked: this release has not been signed yet. Try again shortly.")?;
+        let signature = http_client()
+            .get(&sig_url)
+            .send()
+            .await
+            .and_then(|r| r.error_for_status())
+            .map_err(|e| format!("Could not download the update signature: {e}"))?
+            .text()
+            .await
+            .map_err(|e| format!("Could not read the update signature: {e}"))?;
+        verify_update_signature(public_key, &expected_sha256, &signature)
+            .map_err(|e| format!("Update blocked: {e}"))?;
+    }
+
     let _ = app.emit(
         "updater-status",
         format!("Downloading & verifying PETABLOCKS Launcher v{version}..."),
@@ -328,6 +390,33 @@ pub async fn install_update(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // Test vector produced with OpenSSL (`openssl pkeyutl -sign -rawin`), the same tool the
+    // release workflow uses, from a throwaway key.
+    const TEST_PUBLIC_KEY: &str = "rKjpF8cqnFPCT4vTE1r19QRKCbwamkXhSP5Bu8D3fXs=";
+    const TEST_DIGEST: &str = "0dc2153d4f4b117817956252c097ebf90f1b15b0ffed60fd92998ba68a4f11eb";
+    const TEST_SIGNATURE: &str =
+        "c/RBzPFI+hDbAVz4hBh6jYTUlpM0SI2YQMjlxTNtsrKF0lOWzMfo53dLUioDSg3rxVK/xqk11aNnzr/Pl9I4Dw==";
+
+    #[test]
+    fn update_signature_verification() {
+        assert!(verify_update_signature(TEST_PUBLIC_KEY, TEST_DIGEST, TEST_SIGNATURE).is_ok());
+        // Case and surrounding whitespace in the inputs do not matter.
+        assert!(verify_update_signature(
+            TEST_PUBLIC_KEY,
+            &TEST_DIGEST.to_ascii_uppercase(),
+            &format!("{TEST_SIGNATURE}\n")
+        )
+        .is_ok());
+
+        let other_digest = TEST_DIGEST.replacen('0', "1", 1);
+        assert!(verify_update_signature(TEST_PUBLIC_KEY, &other_digest, TEST_SIGNATURE).is_err());
+        assert!(verify_update_signature(TEST_PUBLIC_KEY, TEST_DIGEST, "").is_err());
+        assert!(verify_update_signature(TEST_PUBLIC_KEY, TEST_DIGEST, "not base64!").is_err());
+        assert!(verify_update_signature("AAAA", TEST_DIGEST, TEST_SIGNATURE).is_err());
+        let wrong_key = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
+        assert!(verify_update_signature(wrong_key, TEST_DIGEST, TEST_SIGNATURE).is_err());
+    }
 
     #[test]
     fn semver_orders_numerically_and_prereleases() {

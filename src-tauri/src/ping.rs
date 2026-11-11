@@ -305,7 +305,9 @@ mod tests {
         );
     }
 
+    /// Hits the real servers, so it is opt-in: `cargo test -- --ignored`.
     #[tokio::test]
+    #[ignore = "requires network access to the live PETABLOCKS servers"]
     async fn test_live_ping_servers() {
         let s2 = ping_server("s2.petablocks.com").await;
         println!("s2 ping: online={}, players={}/{}, motd={:?}, latency={:?}", s2.online, s2.online_players, s2.max_players, s2.motd, s2.latency_ms);

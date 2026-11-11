@@ -11,6 +11,10 @@ jobs:
     runs-on: windows-latest
     permissions:
       contents: write
+    env:
+      # Secrets cannot be read in `if:` conditions, so expose only whether they are configured.
+      HAS_WINDOWS_CERT: ${{ secrets.WINDOWS_CERTIFICATE != '' }}
+      HAS_UPDATE_SIGNING_KEY: ${{ secrets.PB_UPDATE_SIGNING_KEY != '' }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -45,16 +49,41 @@ jobs:
           grep -q "\"$v\"" src/version.ts || { echo "src/version.ts version != $v"; exit 1; }
           if [[ "$GITHUB_REF" == refs/tags/v* && "$GITHUB_REF_NAME" != "v$v" ]]; then echo "Tag $GITHUB_REF_NAME != v$v"; exit 1; fi
 
-      - name: Typecheck frontend
-        run: npx tsc -b
+      - name: Typecheck and lint frontend
+        run: |
+          npm run typecheck
+          npm run lint
 
       - name: Run Rust unit tests
         run: cargo test --manifest-path src-tauri/Cargo.toml
 
+      # Optional Authenticode signing. Set the WINDOWS_CERTIFICATE (base64 .pfx) and
+      # WINDOWS_CERTIFICATE_PASSWORD secrets to enable it; without them the installer is unsigned.
+      - name: Import code signing certificate
+        if: env.HAS_WINDOWS_CERT == 'true'
+        shell: pwsh
+        env:
+          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: |
+          $pfx = Join-Path $env:RUNNER_TEMP "codesign.pfx"
+          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE))
+          $password = ConvertTo-SecureString $env:WINDOWS_CERTIFICATE_PASSWORD -AsPlainText -Force
+          $cert = Import-PfxCertificate -FilePath $pfx -CertStoreLocation Cert:\CurrentUser\My -Password $password
+          Remove-Item $pfx
+          $conf = Get-Content src-tauri/tauri.conf.json -Raw | ConvertFrom-Json
+          $conf.bundle.windows | Add-Member -NotePropertyName certificateThumbprint -NotePropertyValue $cert.Thumbprint -Force
+          $conf.bundle.windows | Add-Member -NotePropertyName digestAlgorithm -NotePropertyValue "sha256" -Force
+          $conf.bundle.windows | Add-Member -NotePropertyName timestampUrl -NotePropertyValue "http://timestamp.digicert.com" -Force
+          $conf | ConvertTo-Json -Depth 32 | Set-Content src-tauri/tauri.conf.json
+
       - name: Build Tauri NSIS installer
-        uses: tauri-apps/tauri-action@v0
+        uses: tauri-apps/tauri-action@84b9d35b5fc46c1e45415bdb6144030364f7ebc5 # v0.6.2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Public half of the update signing key. When set, this build only installs updates
+          # whose release carries a valid `<installer>.sig`.
+          PB_UPDATE_PUBLIC_KEY: ${{ vars.PB_UPDATE_PUBLIC_KEY }}
         with:
           tagName: v__VERSION__
           releaseName: "PETABLOCKS Launcher v__VERSION__"
@@ -62,20 +91,52 @@ jobs:
           releaseDraft: false
           prerelease: ${{ contains(github.ref_name, '-') }}
 
-      - name: Carry forward modpack manifests and mrpacks to new release
+      # Detached Ed25519 signature over the installer's SHA-256, verified by launchers built
+      # with PB_UPDATE_PUBLIC_KEY. Enabled by the PB_UPDATE_SIGNING_KEY secret (PEM private key).
+      - name: Sign installer for the in-app updater
+        if: env.HAS_UPDATE_SIGNING_KEY == 'true' && startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PB_UPDATE_SIGNING_KEY: ${{ secrets.PB_UPDATE_SIGNING_KEY }}
+        run: |
+          set -euo pipefail
+          installer=$(ls src-tauri/target/release/bundle/nsis/*-setup.exe | head -n 1)
+          key="$RUNNER_TEMP/update-signing-key.pem"
+          printf '%s\n' "$PB_UPDATE_SIGNING_KEY" > "$key"
+          printf '%s' "$(sha256sum "$installer" | cut -d' ' -f1)" > "$RUNNER_TEMP/digest.txt"
+          openssl pkeyutl -sign -inkey "$key" -rawin -in "$RUNNER_TEMP/digest.txt" -out "$RUNNER_TEMP/sig.bin"
+          rm -f "$key"
+          openssl base64 -A -in "$RUNNER_TEMP/sig.bin" -out "$installer.sig"
+          gh release upload "$GITHUB_REF_NAME" "$installer.sig" --clobber
+
+      # Launcher releases also host the modpack manifests and .mrpack archives so that
+      # releases/latest/download/... keeps working. Always copy the newest published modpack
+      # release of each pack instead of a pinned version.
+      - name: Carry forward the latest modpack manifests and mrpacks
+        if: startsWith(github.ref, 'refs/tags/')
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          set -uo pipefail
           TAG="${GITHUB_REF_NAME}"
-          echo "Carrying forward modpack bundles to $TAG..."
-          # Download public manifests and mrpacks from pb-modpacks
-          gh release download s2-v0.22.0 --repo Petablocks/pb-modpacks -p "PETABLOCKS-Season-2-0.22.0.mrpack" -p "launcher-manifest.json" --clobber || true
-          gh release download create2-v1.4.1 --repo Petablocks/pb-modpacks -p "PETABLOCKS-Create-2-1.4.1.mrpack" -p "launcher-manifest-create2.json" --clobber || true
-          # Upload them to this new release so releases/latest/download always has them
-          for f in PETABLOCKS-Season-2-*.mrpack PETABLOCKS-Create-2-*.mrpack launcher-manifest*.json; do
-            if [ -f "$f" ]; then
-              echo "Uploading $f to $TAG..."
-              gh release upload "$TAG" "$f" --clobber || true
+          mkdir -p carry && cd carry
+          for prefix in s2-v create2-v; do
+            latest=$(gh release list --repo Petablocks/pb-modpacks --limit 100 \
+              --json tagName,isDraft,isPrerelease \
+              --jq "[.[] | select((.isDraft or .isPrerelease) | not) | .tagName | select(startswith(\"$prefix\"))][0] // empty")
+            if [ -z "$latest" ]; then
+              echo "::warning::No published pb-modpacks release found for prefix $prefix"
+              continue
             fi
+            echo "Carrying forward $latest"
+            gh release download "$latest" --repo Petablocks/pb-modpacks \
+              -p "*.mrpack" -p "launcher-manifest*.json" --clobber \
+              || echo "::warning::Could not download assets from $latest"
+          done
+          for f in *.mrpack launcher-manifest*.json; do
+            [ -f "$f" ] || continue
+            echo "Uploading $f to $TAG"
+            gh release upload "$TAG" "$f" --clobber || echo "::warning::Upload of $f failed"
           done

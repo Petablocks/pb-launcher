@@ -59,6 +59,7 @@ function Shell() {
     installUpdate,
     settings,
     notice,
+    ticker,
   } = useLauncher();
   const Page = PAGES[tab];
 
@@ -144,9 +145,7 @@ function Shell() {
                 <Newspaper size={13} className="text-pb-cyan" />
                 What's new
               </span>
-              <span className="truncate text-white/80">
-                PETABLOCKS Season 2 (Minecraft 1.21.1 / NeoForge 21.1.259) is live on s2.petablocks.com!
-              </span>
+              <span className="truncate text-white/80">{ticker}</span>
             </div>
             <button
               type="button"

@@ -3,6 +3,22 @@
 All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.17.0] - 2026-11-11
+### Added
+- **Remote launcher config** (`launcher-config.json`): the instance list (servers, versions, manifest and changelog links, access policy, artwork), the footer headline and the News announcements are fetched from this repository, cached, and fall back to the copy bundled with the launcher. Adding a server, changing a link or posting news no longer needs a launcher release.
+- **Signed launcher updates**: builds made with an update signing key only install an update when the release carries a valid signature for the installer, in addition to the existing SHA-256 check.
+- **Pull request checks**: typecheck, lint and build for the frontend; formatting, Clippy and unit tests for the backend.
+
+### Changed
+- The Closed Beta access check in the launch backend now follows each instance's `accessPolicy` from the launcher config; unknown instances stay gated.
+- Release builds can be Authenticode-signed when a certificate is configured.
+
+### Infrastructure
+- `release.yml` carries forward the newest published `s2-*` and `create2-*` modpack releases instead of pinned versions, signs the installer for the in-app updater when `PB_UPDATE_SIGNING_KEY` is set, supports optional Authenticode signing, and pins `tauri-action` to a commit.
+- New `ci.yml` workflow for pull requests and pushes to `master`.
+- ESLint (`npm run lint`) with the React Hooks rules; TypeScript now rejects unused locals and parameters.
+- The live server ping test is opt-in (`cargo test -- --ignored`) so unit tests no longer depend on the network.
+
 ## [1.16.0] - 2026-11-11
 ### Added
 - **Getting-started checklist** on the Play tab for new players: sign in with Microsoft, link Discord (when a closed beta server needs it), then install and play. It disappears once the account is ready and a modpack is installed.

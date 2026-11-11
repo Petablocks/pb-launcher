@@ -24,7 +24,7 @@ export default function InstanceHero({
   const { hasUpdate, latestVersion, installedVersion } = getVersionInfo(rt);
   const playable = inst.status === "playable";
   const loaderVersion =
-    rt.manifest?.neoforge || inst.loaderVersion || inst.neoforgeVersion || inst.loader;
+    rt.manifest?.neoforge || inst.neoforgeVersion || inst.loader;
 
   return (
     <section

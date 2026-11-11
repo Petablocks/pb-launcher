@@ -48,7 +48,7 @@ export default function SplashScreen() {
 
         // Step 3: Check Modpack Manifest & Java 21 runtime in parallel
         if (!cancelled) {
-          setStatus("Syncing Season 2 manifest & Java 21 runtime...");
+          setStatus("Checking modpacks and Java...");
           setProgress(74);
         }
         if (inTauri) {

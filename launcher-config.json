@@ -1,0 +1,100 @@
+{
+  "formatVersion": 1,
+  "instances": [
+    {
+      "id": "petablocks-s2",
+      "name": "PETABLOCKS Season 2",
+      "serverAddress": "s2.petablocks.com",
+      "minecraftVersion": "1.21.1",
+      "neoforgeVersion": "21.1.259",
+      "loader": "NeoForge",
+      "loaderIcon": "/cards/neoforge-icon.png",
+      "manifestUrl": "https://github.com/Petablocks/pb-launcher/releases/latest/download/launcher-manifest.json",
+      "changelogUrl": "https://github.com/Petablocks/pb-launcher/releases/latest/download/CHANGELOG.md",
+      "status": "playable",
+      "logoImage": "/cards/logo-season2.png",
+      "bgImage": "/cards/bg-season2.jpg",
+      "description": "The official Create SMP season 2 modpack featuring train logistics, aeronautics & community industry.",
+      "badge": "Official Season",
+      "accessPolicy": "beta_role"
+    },
+    {
+      "id": "petablocks-create2",
+      "name": "PETABLOCKS Create 2",
+      "serverAddress": "create2.petablocks.com",
+      "minecraftVersion": "1.21.1",
+      "neoforgeVersion": "21.1.233",
+      "loader": "NeoForge",
+      "loaderIcon": "/cards/neoforge-icon.png",
+      "manifestUrl": "https://github.com/Petablocks/pb-launcher/releases/latest/download/launcher-manifest-create2.json",
+      "changelogUrl": "https://github.com/Petablocks/pb-modpacks/releases/download/create2-v1.4.1/CHANGELOG.md",
+      "status": "playable",
+      "logoImage": "/cards/logo-create2.png",
+      "bgImage": "/cards/bg-create2.jpg",
+      "description": "The beloved Create 2 network server. Automated industry, steam power, and community builds.",
+      "badge": "Live Server",
+      "accessPolicy": "public"
+    },
+    {
+      "id": "petablocks-hungergames",
+      "name": "PETABLOCKS Hunger Games",
+      "serverAddress": "hg.petablocks.com",
+      "minecraftVersion": "Latest",
+      "loader": "Paper",
+      "loaderIcon": "/cards/paper-icon.png",
+      "manifestUrl": "",
+      "status": "coming_soon",
+      "logoImage": "/cards/logo-hungergames.png",
+      "bgImage": "/cards/bg-hungergames.jpg",
+      "description": "Competitive custom arena PvP survival. Fight for the crown and earn network badges.",
+      "badge": "Spring 2027",
+      "playLabel": "Coming Spring 2027"
+    },
+    {
+      "id": "petablocks-patreon",
+      "name": "Patreon Supporter Server",
+      "serverAddress": "patreon.petablocks.com",
+      "minecraftVersion": "1.21.1",
+      "neoforgeVersion": "21.1.259",
+      "loader": "NeoForge",
+      "loaderIcon": "/cards/neoforge-icon.png",
+      "manifestUrl": "",
+      "status": "coming_soon",
+      "logoImage": "/cards/logo-patreon.png",
+      "bgImage": "/cards/bg-create2.jpg",
+      "description": "Exclusive sandbox & development testbed server dedicated to Patreon supporters.",
+      "badge": "Supporters Only",
+      "playLabel": "Coming soon"
+    }
+  ],
+  "ticker": "PETABLOCKS Season 2 is live on s2.petablocks.com!",
+  "announcements": [
+    {
+      "id": "s2-beta",
+      "tag": "Season 2 closed beta",
+      "tone": "cyan",
+      "date": "November 2026",
+      "title": "PETABLOCKS Season 2 & Official Launcher Closed Beta",
+      "summary": "Welcome to the official PETABLOCKS Desktop Launcher! Season 2 runs on Minecraft 1.21.1 with Create, Steam 'n' Rails, Aeronautics, FTB Chunks, and automatic modpack updates.",
+      "bullets": [
+        "Link your Discord account from the account menu or with /link in Discord to claim 32x Diamonds and sync your network rank.",
+        "Modpack updates show up on the Play tab with one-click release notes.",
+        "Found a bug or have a mod suggestion? Use the Feedback tab to send a report directly to the team."
+      ]
+    },
+    {
+      "id": "network-roadmap",
+      "tag": "Network roadmap",
+      "tone": "purple",
+      "date": "2026 – 2027",
+      "title": "Upcoming Servers: Patreon Testbed & Hunger Games",
+      "summary": "The launcher is ready for every server on the PETABLOCKS Minecraft Network:",
+      "bullets": [
+        "PETABLOCKS Season 2 (s2.petablocks.com) — live now in closed beta, public launch in January 2027.",
+        "PETABLOCKS Create 2 (create2.petablocks.com) — live and open to everyone.",
+        "Patreon Supporter Server (patreon.petablocks.com) — sandbox and early-access testbed for Patreon supporters.",
+        "PETABLOCKS Hunger Games (hg.petablocks.com) — custom competitive arena survival arriving Spring 2027."
+      ]
+    }
+  ]
+}

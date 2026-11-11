@@ -40,12 +40,6 @@ pub struct LaunchRequest {
     pub instance_name: Option<String>,
 }
 
-/// Instances whose access policy is `public` launch without a Discord link / guild check.
-/// Every other instance keeps the Closed Beta gate.
-fn instance_requires_discord(instance_id: &str) -> bool {
-    !matches!(instance_id, "petablocks-create2")
-}
-
 /// Sanitised Rich Presence headline for the instance being played.
 fn rpc_details(instance_name: Option<&str>) -> String {
     let name: String = instance_name
@@ -560,7 +554,7 @@ pub async fn launch_game(app: AppHandle, mut req: LaunchRequest) -> Result<(), S
 
     // 4. Backend enforcement of Closed Beta Discord link & guild membership
     //    (skipped for instances whose access policy is public)
-    if instance_requires_discord(&req.instance_id) {
+    if crate::config::instance_requires_discord(&req.instance_id) {
         if let Ok(discord) = crate::community::check_discord_link(&verified_profile.uuid).await {
             if !discord.linked || !discord.in_guild {
                 return Err(
@@ -950,10 +944,7 @@ mod tests {
     }
 
     #[test]
-    fn access_policy_and_rpc_headline() {
-        assert!(instance_requires_discord("petablocks-s2"));
-        assert!(!instance_requires_discord("petablocks-create2"));
-        assert!(instance_requires_discord("anything-else"));
+    fn rpc_headline() {
         assert_eq!(rpc_details(Some("PETABLOCKS Create 2")), "Playing PETABLOCKS Create 2");
         assert_eq!(rpc_details(None), "Playing PETABLOCKS");
         assert_eq!(rpc_details(Some("  ")), "Playing PETABLOCKS");

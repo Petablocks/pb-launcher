@@ -1,4 +1,3 @@
-import React from "react";
 
 export function MinecraftServerIcon({ className = "w-4 h-4", size }: { className?: string; size?: number }) {
   const style = size ? { width: size, height: size } : undefined;

@@ -22,7 +22,14 @@ import {
   pingServer,
   submitCrashWebhook,
 } from "../community";
-import { INSTANCES, Instance } from "../instances";
+import {
+  Announcement,
+  BUNDLED_CONFIG,
+  INSTANCES,
+  Instance,
+  LauncherConfig,
+  getLauncherConfig,
+} from "../instances";
 import {
   LauncherSettings,
   getRunningInstances,
@@ -118,6 +125,9 @@ const SELECTED_INSTANCE_KEY = "pb_active_instance";
 
 interface LauncherContextValue {
   instances: Instance[];
+  /** One-line headline shown in the footer. */
+  ticker: string;
+  announcements: Announcement[];
   selectedInstance: Instance;
   selectInstance: (id: string) => void;
 
@@ -183,7 +193,21 @@ export function useManagedInstance(): Instance {
 }
 
 export function LauncherProvider({ children }: { children: ReactNode }) {
-  const [instances] = useState<Instance[]>(INSTANCES);
+  // Starts from the bundled config and switches to the remote copy once the backend has it.
+  const [config, setConfig] = useState<LauncherConfig>(BUNDLED_CONFIG);
+  const instances = config.instances;
+  useEffect(() => {
+    let cancelled = false;
+    getLauncherConfig()
+      .then((next) => {
+        if (!cancelled && next.instances.length > 0) setConfig(next);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const [selectedId, setSelectedId] = useState<string>(() => {
     try {
       return localStorage.getItem(SELECTED_INSTANCE_KEY) || INSTANCES[0].id;
@@ -574,6 +598,8 @@ export function LauncherProvider({ children }: { children: ReactNode }) {
 
   const value: LauncherContextValue = {
     instances,
+    ticker: config.ticker,
+    announcements: config.announcements,
     selectedInstance,
     selectInstance,
     session,

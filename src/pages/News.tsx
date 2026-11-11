@@ -27,41 +27,12 @@ import {
 } from "../components/ui";
 import { ParsedRelease, ReleaseCard, parseChangelog } from "../lib/changelog";
 import { openExternal } from "../lib/open";
-import { useManagedInstance } from "../state/LauncherProvider";
+import { useLauncher, useManagedInstance } from "../state/LauncherProvider";
 import { getChangelog } from "../sync";
 import { APP_VERSION } from "../version";
 
-const ANNOUNCEMENTS = [
-  {
-    id: "s2-beta",
-    tag: "SEASON 2 CLOSED BETA",
-    tone: "cyan" as Tone,
-    date: "November 2026",
-    title: "PETABLOCKS Season 2 & Official Launcher Closed Beta",
-    summary:
-      "Welcome to the official PETABLOCKS Desktop Launcher! Season 2 runs on Minecraft 1.21.1 (NeoForge 21.1.259) with Create 6.0.10, Steam 'n' Rails, Aeronautics, FTB Chunks, and automatic modpack updates.",
-    bullets: [
-      "Link your Discord account via the sidebar profile pill or `/link` in-game to claim 32x Diamonds and sync your network rank.",
-      "Modpack updates now notify you right on the Play card and banner with one-click Release Notes and synchronization.",
-      "Found a bug or have a mod suggestion? Use the Feedback tab in the sidebar to submit a report directly to the team!",
-    ],
-  },
-  {
-    id: "network-roadmap",
-    tag: "NETWORK ROADMAP",
-    tone: "purple" as Tone,
-    date: "2026 – 2027",
-    title: "Upcoming Servers: Create 2, Patreon Testbed & Hunger Games",
-    summary:
-      "The new 2x2 Play screen prepares the launcher for every upcoming server on the PETABLOCKS Minecraft Network:",
-    bullets: [
-      "PETABLOCKS Season 2 (s2.petablocks.com) — Live now in Closed Beta, public launch in January 2027.",
-      "PETABLOCKS Create 2 (create2.petablocks.com) — Direct one-click launcher integration coming soon.",
-      "Patreon Supporter Server (patreon.petablocks.com) — Exclusive sandbox and early-access testbed for Patreon supporters.",
-      "PETABLOCKS Hunger Games (hg.petablocks.com) — Custom competitive Paper arena survival arriving Spring 2027.",
-    ],
-  },
-];
+const TONES: Tone[] = ["cyan", "mint", "amber", "purple", "red", "neutral"];
+const toTone = (tone: string): Tone => (TONES.includes(tone as Tone) ? (tone as Tone) : "cyan");
 
 const LINKS = [
   { label: "PETABLOCKS Website", url: "https://petablocks.com", icon: Globe },
@@ -78,6 +49,7 @@ const launcherReleases = parseChangelog(launcherChangelogRaw);
 
 export default function News() {
   const instance = useManagedInstance();
+  const { announcements } = useLauncher();
   const [feed, setFeed] = useState<Feed>("announcements");
   const [modpackReleases, setModpackReleases] = useState<ParsedRelease[]>([]);
   const [loadingModpack, setLoadingModpack] = useState(false);
@@ -183,21 +155,28 @@ export default function News() {
 
       {feed === "announcements" && (
         <div className="space-y-4">
-          {ANNOUNCEMENTS.map((item) => (
+          {announcements.length === 0 && (
+            <EmptyState title="No announcements right now">Check back soon.</EmptyState>
+          )}
+          {announcements.map((item) => (
             <Card key={item.id}>
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <Badge tone={item.tone} className="px-3 font-extrabold uppercase tracking-wider">
+                <Badge tone={toTone(item.tone)} className="px-3 font-extrabold uppercase tracking-wider">
                   <Sparkles size={11} /> {item.tag}
                 </Badge>
                 <span className="text-xs text-pb-muted">{item.date}</span>
               </div>
               <h2 className="mt-3 text-base">{item.title}</h2>
-              <p className="mt-1.5 text-xs leading-relaxed text-white/80">{item.summary}</p>
-              <ul className="mt-3 list-disc space-y-1.5 pl-5 text-xs text-pb-muted">
-                {item.bullets.map((b, i) => (
-                  <li key={i}>{b}</li>
-                ))}
-              </ul>
+              {item.summary && (
+                <p className="mt-1.5 text-xs leading-relaxed text-white/80">{item.summary}</p>
+              )}
+              {item.bullets.length > 0 && (
+                <ul className="mt-3 list-disc space-y-1.5 pl-5 text-xs text-pb-muted">
+                  {item.bullets.map((b, i) => (
+                    <li key={i}>{b}</li>
+                  ))}
+                </ul>
+              )}
             </Card>
           ))}
 

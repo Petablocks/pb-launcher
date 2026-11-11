@@ -1,5 +1,6 @@
 mod auth;
 mod community;
+mod config;
 mod events;
 mod java;
 mod launch;
@@ -194,6 +195,12 @@ async fn java_install(app: AppHandle) -> Result<JavaStatus, String> {
 #[tauri::command]
 async fn launch_instance(app: AppHandle, req: LaunchRequest) -> Result<(), String> {
     launch::launch_game(app, req).await
+}
+
+/// Instance list, ticker and announcements (remote, cached, or bundled as a last resort).
+#[tauri::command]
+async fn launcher_config_get() -> config::LauncherConfig {
+    config::load_config().await
 }
 
 /// Ends a running game process started by this launcher.
@@ -447,6 +454,7 @@ pub fn run() {
             system_memory_mb,
             java_detect,
             java_install,
+            launcher_config_get,
             launch_instance,
             game_stop,
             game_running,
