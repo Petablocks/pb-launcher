@@ -251,7 +251,9 @@ async fn screenshots_list(
         .await
         .map_err(|e| e.to_string())??;
     let shots_dir = sync::instance_dir(&inst_for_scope).join("screenshots");
-    let _ = app.asset_protocol_scope().allow_directory(&shots_dir, false);
+    let _ = app
+        .asset_protocol_scope()
+        .allow_directory(&shots_dir, false);
     Ok(list)
 }
 

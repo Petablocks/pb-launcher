@@ -6,8 +6,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::sync::Arc;
-use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use std::sync::{LazyLock, Mutex};
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Emitter, Manager};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command as TokioCommand;
@@ -271,10 +271,7 @@ async fn setup_vanilla(
     }
 
     if !asset_tasks.is_empty() {
-        emit(&format!(
-            "Downloading {} game assets...",
-            asset_tasks.len()
-        ));
+        emit(&format!("Downloading {} game assets...", asset_tasks.len()));
         download_batch(client, asset_tasks).await?;
     }
 
@@ -511,7 +508,10 @@ fn assign_child_to_job_object(pid: u32) {
 /// The synced modpack manifest is the source of truth for the Minecraft and NeoForge versions,
 /// so a modpack update that bumps the loader needs no launcher release. The request values
 /// are only used when no (valid) manifest has been cached yet.
-fn apply_manifest_versions(req: &mut LaunchRequest, manifest: Option<&crate::sync::LauncherManifest>) {
+fn apply_manifest_versions(
+    req: &mut LaunchRequest,
+    manifest: Option<&crate::sync::LauncherManifest>,
+) {
     let Some(m) = manifest else {
         return;
     };
@@ -545,7 +545,10 @@ pub async fn launch_game(app: AppHandle, mut req: LaunchRequest) -> Result<(), S
                 .into(),
         );
     };
-    if req.session.offline || verified_profile.uuid.trim().is_empty() || mc_access_token.trim().is_empty() {
+    if req.session.offline
+        || verified_profile.uuid.trim().is_empty()
+        || mc_access_token.trim().is_empty()
+    {
         return Err(
             "Launch blocked: Your Minecraft session is offline or expired. Please sign in again."
                 .into(),
@@ -575,7 +578,14 @@ pub async fn launch_game(app: AppHandle, mut req: LaunchRequest) -> Result<(), S
 
     // 6. Ensure Vanilla 1.21.1 + assets
     let client = http_client();
-    let vanilla_json = setup_vanilla(&app, &req.instance_id, client, &req.minecraft_version, &root).await?;
+    let vanilla_json = setup_vanilla(
+        &app,
+        &req.instance_id,
+        client,
+        &req.minecraft_version,
+        &root,
+    )
+    .await?;
 
     // 7. Ensure NeoForge
     let nf_json = setup_neoforge(
@@ -671,7 +681,11 @@ pub async fn launch_game(app: AppHandle, mut req: LaunchRequest) -> Result<(), S
         full_args.push(req.server_address.trim().to_string());
     }
 
-    emit_launch_status(&app, Some(&req.instance_id), "Starting Minecraft (NeoForge)...");
+    emit_launch_status(
+        &app,
+        Some(&req.instance_id),
+        "Starting Minecraft (NeoForge)...",
+    );
 
     let mut mc_cmd = TokioCommand::new(&java_exe);
     mc_cmd
@@ -826,7 +840,10 @@ pub async fn launch_game(app: AppHandle, mut req: LaunchRequest) -> Result<(), S
                         let _ = writeln!(file, "{line}");
                     }
                 }
-                let _ = tx.send(GameLogLine { line, is_error: false });
+                let _ = tx.send(GameLogLine {
+                    line,
+                    is_error: false,
+                });
             }
         });
     }
@@ -843,7 +860,10 @@ pub async fn launch_game(app: AppHandle, mut req: LaunchRequest) -> Result<(), S
                         let _ = writeln!(file, "[ERR] {line}");
                     }
                 }
-                let _ = tx.send(GameLogLine { line, is_error: true });
+                let _ = tx.send(GameLogLine {
+                    line,
+                    is_error: true,
+                });
             }
         });
     }
@@ -945,7 +965,10 @@ mod tests {
 
     #[test]
     fn rpc_headline() {
-        assert_eq!(rpc_details(Some("PETABLOCKS Create 2")), "Playing PETABLOCKS Create 2");
+        assert_eq!(
+            rpc_details(Some("PETABLOCKS Create 2")),
+            "Playing PETABLOCKS Create 2"
+        );
         assert_eq!(rpc_details(None), "Playing PETABLOCKS");
         assert_eq!(rpc_details(Some("  ")), "Playing PETABLOCKS");
     }

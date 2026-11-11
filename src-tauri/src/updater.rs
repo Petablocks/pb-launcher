@@ -210,7 +210,8 @@ async fn fetch_latest_installer_asset(
                     download_url = Some(url.to_string());
                     if let Some(digest) = asset["digest"].as_str() {
                         if let Some(hex_str) = digest.strip_prefix("sha256:") {
-                            if hex_str.len() == 64 && hex_str.chars().all(|c| c.is_ascii_hexdigit()) {
+                            if hex_str.len() == 64 && hex_str.chars().all(|c| c.is_ascii_hexdigit())
+                            {
                                 sha256 = Some(hex_str.to_string());
                             }
                         }
@@ -335,14 +336,16 @@ pub async fn install_update(
     if asset.download_url != download_url {
         return Err("Download URL does not match the latest verified GitHub release asset.".into());
     }
-    let expected_sha256 = asset.sha256.ok_or(
-        "Update blocked: GitHub release asset is missing a verified SHA-256 digest.",
-    )?;
+    let expected_sha256 = asset
+        .sha256
+        .ok_or("Update blocked: GitHub release asset is missing a verified SHA-256 digest.")?;
 
     if let Some(public_key) = UPDATE_PUBLIC_KEY.filter(|k| !k.trim().is_empty()) {
         let sig_url = asset
             .signature_url
-            .filter(|u| u.starts_with("https://github.com/Petablocks/pb-launcher/releases/download/"))
+            .filter(|u| {
+                u.starts_with("https://github.com/Petablocks/pb-launcher/releases/download/")
+            })
             .ok_or("Update blocked: this release has not been signed yet. Try again shortly.")?;
         let signature = http_client()
             .get(&sig_url)
@@ -376,7 +379,10 @@ pub async fn install_update(
     .await
     .map_err(|e| format!("Update download or SHA-256 verification failed: {e}"))?;
 
-    let _ = app.emit("updater-status", "Launching verified installer & restarting...");
+    let _ = app.emit(
+        "updater-status",
+        "Launching verified installer & restarting...",
+    );
 
     Command::new(&installer_path)
         .args(["/P", "/R"])

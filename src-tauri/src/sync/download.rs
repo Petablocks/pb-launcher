@@ -102,7 +102,12 @@ pub async fn download_to(
         if attempt > 0 {
             tokio::time::sleep(Duration::from_millis(800 * attempt)).await;
         }
-        let mut resp = match client.get(url).send().await.and_then(|r| r.error_for_status()) {
+        let mut resp = match client
+            .get(url)
+            .send()
+            .await
+            .and_then(|r| r.error_for_status())
+        {
             Ok(r) => r,
             Err(e) => {
                 last = format!("GET {url}: {e}");
@@ -216,7 +221,9 @@ pub fn verify_file_hash(path: &Path, expected: ExpectedHash<'_>) -> bool {
         ExpectedHash::Sha1(exp) => {
             let mut h = Sha1::new();
             loop {
-                let Ok(n) = f.read(&mut buf) else { return false };
+                let Ok(n) = f.read(&mut buf) else {
+                    return false;
+                };
                 if n == 0 {
                     break;
                 }
@@ -227,7 +234,9 @@ pub fn verify_file_hash(path: &Path, expected: ExpectedHash<'_>) -> bool {
         ExpectedHash::Sha256(exp) => {
             let mut h = Sha256::new();
             loop {
-                let Ok(n) = f.read(&mut buf) else { return false };
+                let Ok(n) = f.read(&mut buf) else {
+                    return false;
+                };
                 if n == 0 {
                     break;
                 }
@@ -238,7 +247,9 @@ pub fn verify_file_hash(path: &Path, expected: ExpectedHash<'_>) -> bool {
         ExpectedHash::Sha512(exp) => {
             let mut h = Sha512::new();
             loop {
-                let Ok(n) = f.read(&mut buf) else { return false };
+                let Ok(n) = f.read(&mut buf) else {
+                    return false;
+                };
                 if n == 0 {
                     break;
                 }

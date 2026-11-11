@@ -86,9 +86,7 @@ pub struct LauncherConfig {
 /// The config currently in effect. Starts as the bundled copy so access policy checks always
 /// have an answer, even before the first fetch.
 static ACTIVE: LazyLock<RwLock<LauncherConfig>> = LazyLock::new(|| {
-    RwLock::new(
-        parse_config(BUNDLED_CONFIG).expect("bundled launcher-config.json must be valid"),
-    )
+    RwLock::new(parse_config(BUNDLED_CONFIG).expect("bundled launcher-config.json must be valid"))
 });
 
 fn cache_path() -> std::path::PathBuf {
@@ -132,7 +130,10 @@ fn validate_instance(mut inst: InstanceConfig) -> Result<InstanceConfig, String>
     validate_version_token("instance id", &inst.id)?;
     let (host, _) = parse_host_port(&inst.server_address);
     if !is_allowed_server_host(&host) {
-        return Err(format!("server address not allowed: {}", inst.server_address));
+        return Err(format!(
+            "server address not allowed: {}",
+            inst.server_address
+        ));
     }
     if inst.status != "playable" && inst.status != "coming_soon" {
         return Err(format!("unknown status: {}", inst.status));
@@ -158,11 +159,18 @@ fn validate_instance(mut inst: InstanceConfig) -> Result<InstanceConfig, String>
     if !is_allowed_image(&inst.logo_image) || !is_allowed_image(&inst.bg_image) {
         return Err("image source not allowed".into());
     }
-    if inst.loader_icon.as_deref().is_some_and(|i| !is_allowed_image(i)) {
+    if inst
+        .loader_icon
+        .as_deref()
+        .is_some_and(|i| !is_allowed_image(i))
+    {
         inst.loader_icon = None;
     }
     if let Some(policy) = inst.access_policy.as_deref() {
-        if !matches!(policy, "public" | "discord_linked" | "beta_role" | "patreon_role") {
+        if !matches!(
+            policy,
+            "public" | "discord_linked" | "beta_role" | "patreon_role"
+        ) {
             return Err(format!("unknown access policy: {policy}"));
         }
     }
@@ -197,7 +205,10 @@ pub fn parse_config(text: &str) -> Result<LauncherConfig, String> {
         let id = inst.id.clone();
         match validate_instance(inst) {
             Ok(valid) if instances.iter().any(|i| i.id == valid.id) => {
-                log_event("WARN", &format!("Launcher config: duplicate instance '{id}' ignored."));
+                log_event(
+                    "WARN",
+                    &format!("Launcher config: duplicate instance '{id}' ignored."),
+                );
             }
             Ok(valid) => instances.push(valid),
             Err(e) => log_event(
@@ -302,7 +313,10 @@ mod tests {
         let cfg = parse_config(BUNDLED_CONFIG).unwrap();
         let raw: serde_json::Value = serde_json::from_str(BUNDLED_CONFIG).unwrap();
         // Nothing in the shipped config may be dropped by validation.
-        assert_eq!(cfg.instances.len(), raw["instances"].as_array().unwrap().len());
+        assert_eq!(
+            cfg.instances.len(),
+            raw["instances"].as_array().unwrap().len()
+        );
         assert!(cfg.instances.iter().any(|i| i.id == "petablocks-s2"));
     }
 

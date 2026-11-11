@@ -127,7 +127,12 @@ async fn sync_instance_inner(
     let disabled_set: HashSet<String> = state_snapshot.disabled_mods.iter().cloned().collect();
 
     // 1. Offload mod hash verification and optional mod toggling to a blocking thread pool
-    emit("mods", 0, manifest.mods.len(), "Verifying installed mods...");
+    emit(
+        "mods",
+        0,
+        manifest.mods.len(),
+        "Verifying installed mods...",
+    );
     let mods_clone = manifest.mods.clone();
     let base_for_check = base_dir.clone();
     let to_download: Vec<LauncherMod> = tokio::task::spawn_blocking(move || {
@@ -317,21 +322,23 @@ async fn apply_mrpack_overrides(
 
     let cache_dir = launcher_root().join("cache");
     let mrpack_dest = cache_dir.join(format!("{instance_id}-{}.mrpack", manifest.version));
-    let expected = match manifest
-        .mrpack_sha256
-        .as_deref()
-        .filter(|s| s.len() == 64)
-    {
+    let expected = match manifest.mrpack_sha256.as_deref().filter(|s| s.len() == 64) {
         Some(sha) => ExpectedHash::Sha256(sha),
         None => ExpectedHash::None,
     };
 
     let mut downloaded = false;
-    if mrpack_dest.exists() && matches!(expected, ExpectedHash::Sha256(_)) && verify_file_hash(&mrpack_dest, expected) {
+    if mrpack_dest.exists()
+        && matches!(expected, ExpectedHash::Sha256(_))
+        && verify_file_hash(&mrpack_dest, expected)
+    {
         downloaded = true;
     } else {
         for url in &candidate_urls {
-            if download_to(client, url, &mrpack_dest, expected).await.is_ok() {
+            if download_to(client, url, &mrpack_dest, expected)
+                .await
+                .is_ok()
+            {
                 downloaded = true;
                 break;
             }
@@ -507,7 +514,12 @@ mod tests {
         let _ = fs::remove_dir_all(&base);
         let src = base.join("roaming");
         let dst = base.join("local");
-        fs::create_dir_all(src.join("instances").join("petablocks-s2").join("shaderpacks")).unwrap();
+        fs::create_dir_all(
+            src.join("instances")
+                .join("petablocks-s2")
+                .join("shaderpacks"),
+        )
+        .unwrap();
         fs::write(
             src.join("instances")
                 .join("petablocks-s2")
@@ -584,7 +596,12 @@ mod tests {
             };
             if entry.size() > 0 {
                 if let Err(err) = std::io::copy(&mut entry, &mut out) {
-                    panic!("Failed to extract {:?} (entry index {}): {}", entry.name(), i, err);
+                    panic!(
+                        "Failed to extract {:?} (entry index {}): {}",
+                        entry.name(),
+                        i,
+                        err
+                    );
                 }
             }
             extracted += 1;

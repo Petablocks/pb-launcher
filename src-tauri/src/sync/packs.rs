@@ -89,7 +89,10 @@ pub fn list_packs(instance_id: &str) -> Result<Vec<PackEntry>, String> {
                     continue;
                 }
                 let raw_name = entry.file_name().to_string_lossy().to_string();
-                if raw_name.ends_with(".txt") || raw_name.contains(".part.") || raw_name.contains(".tmp.") {
+                if raw_name.ends_with(".txt")
+                    || raw_name.contains(".part.")
+                    || raw_name.contains(".tmp.")
+                {
                     continue;
                 }
                 let enabled = !raw_name.ends_with(".disabled");

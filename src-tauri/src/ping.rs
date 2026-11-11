@@ -299,10 +299,7 @@ mod tests {
             parse_host_port("s2.petablocks.com:25566"),
             ("s2.petablocks.com".to_string(), 25566)
         );
-        assert_eq!(
-            parse_host_port("[::1]:25565"),
-            ("::1".to_string(), 25565)
-        );
+        assert_eq!(parse_host_port("[::1]:25565"), ("::1".to_string(), 25565));
     }
 
     /// Hits the real servers, so it is opt-in: `cargo test -- --ignored`.
@@ -310,8 +307,14 @@ mod tests {
     #[ignore = "requires network access to the live PETABLOCKS servers"]
     async fn test_live_ping_servers() {
         let s2 = ping_server("s2.petablocks.com").await;
-        println!("s2 ping: online={}, players={}/{}, motd={:?}, latency={:?}", s2.online, s2.online_players, s2.max_players, s2.motd, s2.latency_ms);
+        println!(
+            "s2 ping: online={}, players={}/{}, motd={:?}, latency={:?}",
+            s2.online, s2.online_players, s2.max_players, s2.motd, s2.latency_ms
+        );
         let c2 = ping_server("create2.petablocks.com").await;
-        println!("c2 ping: online={}, players={}/{}, motd={:?}, latency={:?}", c2.online, c2.online_players, c2.max_players, c2.motd, c2.latency_ms);
+        println!(
+            "c2 ping: online={}, players={}/{}, motd={:?}, latency={:?}",
+            c2.online, c2.online_players, c2.max_players, c2.motd, c2.latency_ms
+        );
     }
 }
