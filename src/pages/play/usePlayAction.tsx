@@ -104,7 +104,7 @@ export function usePlayAction(inst: Instance): PlayAction {
   if (activeInstanceId && activeInstanceId !== inst.id) {
     const other = instances.find((i) => i.id === activeInstanceId);
     return {
-      label: inst.playLabel ?? "Play",
+      label: "Play",
       icon: <Play size={iconSize} fill="currentColor" />,
       onClick: () => {},
       disabled: true,
@@ -114,7 +114,7 @@ export function usePlayAction(inst: Instance): PlayAction {
   }
 
   return {
-    label: hasUpdate ? "Update & Play" : needsInstall ? "Install & Play" : (inst.playLabel ?? "Play"),
+    label: hasUpdate ? "Update & Play" : needsInstall ? "Install & Play" : "Play",
     icon:
       hasUpdate || needsInstall ? (
         <DownloadCloud size={iconSize} />

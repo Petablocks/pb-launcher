@@ -3,6 +3,18 @@
 All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.16.0] - 2026-11-11
+### Added
+- **Getting-started checklist** on the Play tab for new players: sign in with Microsoft, link Discord (when a closed beta server needs it), then install and play. It disappears once the account is ready and a modpack is installed.
+
+### Changed
+- **Redesigned Play tab**: the selected server is a large hero with one primary button, and the other servers sit in a compact row underneath. Selecting a server moves it into the hero.
+- **One status area**: download progress (with Cancel), launch status, the running state (with Stop game), crashes, errors and modpack updates now appear in a single place inside the hero, one message at a time by priority, instead of stacking banners under the grid.
+- **Settings save automatically**. The Save button is gone; a "Saved" indicator confirms each change, and edits still pending when you leave the page are flushed.
+- **Plainer settings**: performance presets are named Light / Recommended / High-end with their memory size, presets that need more RAM than the PC has are disabled, and JVM arguments, the custom Java path and the fallback report webhook moved into a collapsed Advanced section.
+- The sidebar support link is now a quiet text link; the full support card lives under News → Announcements.
+- The sign-in dialog stays open after signing in so Discord linking can be finished in the same place, and offers a direct **Join the Discord server** button when the account is linked but not yet a member.
+
 ## [1.15.0] - 2026-11-11
 ### Added
 - **Stop game**: a running instance can be closed from the launcher.

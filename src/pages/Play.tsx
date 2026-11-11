@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import { useLauncher } from "../state/LauncherProvider";
 import ChangelogModal from "./play/ChangelogModal";
-import InstanceCard from "./play/InstanceCard";
+import InstanceHero from "./play/InstanceHero";
+import InstanceTile from "./play/InstanceTile";
 import LogDrawer from "./play/LogDrawer";
-import StatusArea from "./play/StatusArea";
+import SetupChecklist from "./play/SetupChecklist";
 
 export default function Play() {
   const { instances, selectedInstance, runtimeOf } = useLauncher();
@@ -17,18 +18,22 @@ export default function Play() {
   }, [crashed]);
 
   return (
-    <div className="flex h-full flex-col gap-4">
-      <div className="grid min-h-[440px] flex-1 grid-cols-2 gap-4">
-        {instances.map((inst) => (
-          <InstanceCard key={inst.id} inst={inst} />
-        ))}
-      </div>
+    <div className="flex min-h-full flex-col gap-4">
+      <SetupChecklist />
 
-      <StatusArea
+      <InstanceHero
         inst={selectedInstance}
         onShowLogs={() => setShowLogs(true)}
         onShowChangelog={() => setShowChangelog(true)}
       />
+
+      {instances.length > 1 && (
+        <nav aria-label="Servers" className="flex shrink-0 gap-3">
+          {instances.map((inst) => (
+            <InstanceTile key={inst.id} inst={inst} />
+          ))}
+        </nav>
+      )}
 
       {showLogs && <LogDrawer inst={selectedInstance} onClose={() => setShowLogs(false)} />}
 

@@ -107,15 +107,15 @@ function Shell() {
             <AccountMenu />
           </div>
 
-          <Button
-            variant="support"
-            block
-            className="mb-3"
-            icon={<BuyMeACoffeeLogo size={14} />}
+          <button
+            type="button"
             onClick={() => openExternal(SUPPORT_URL)}
+            className="mb-2 flex w-full items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold text-pb-muted transition hover:bg-white/5 hover:text-white"
           >
-            Buy Me a Coffee <ExternalLink size={12} />
-          </Button>
+            <BuyMeACoffeeLogo size={14} className="shrink-0 text-bmc" />
+            <span className="flex-1 text-left">Support the servers</span>
+            <ExternalLink size={12} />
+          </button>
 
           <div className="flex items-center justify-between px-3 pb-1 text-xs text-pb-muted">
             <span className="flex items-center gap-1.5">
