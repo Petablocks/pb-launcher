@@ -3,8 +3,9 @@ use std::fs::{self, File};
 use std::io;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use tauri::{AppHandle, Emitter};
+use tauri::AppHandle;
 
+use crate::events::emit_launch_status;
 use crate::settings::load_settings;
 use crate::sync::{download_to, http_client, launcher_root, ExpectedHash};
 
@@ -216,7 +217,10 @@ pub fn detect_java() -> JavaStatus {
     }
 }
 
-pub async fn ensure_java_21(app: &AppHandle) -> Result<PathBuf, String> {
+pub async fn ensure_java_21(
+    app: &AppHandle,
+    instance_id: Option<&str>,
+) -> Result<PathBuf, String> {
     let status = tokio::task::spawn_blocking(detect_java)
         .await
         .map_err(|e| e.to_string())?;
@@ -226,8 +230,9 @@ pub async fn ensure_java_21(app: &AppHandle) -> Result<PathBuf, String> {
         }
     }
 
-    let _ = app.emit(
-        "launch-status",
+    emit_launch_status(
+        app,
+        instance_id,
         "Downloading Adoptium OpenJDK 21 runtime (first-time setup)...",
     );
 
@@ -257,7 +262,7 @@ pub async fn ensure_java_21(app: &AppHandle) -> Result<PathBuf, String> {
         .await
         .map_err(|e| format!("Failed to download or verify Java 21 runtime: {e}"))?;
 
-    let _ = app.emit("launch-status", "Extracting OpenJDK 21 runtime...");
+    emit_launch_status(app, instance_id, "Extracting OpenJDK 21 runtime...");
 
     let zip_for_extract = zip_dest.clone();
     let extracted_exe = tokio::task::spawn_blocking(move || {

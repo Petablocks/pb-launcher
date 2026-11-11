@@ -3,6 +3,28 @@
 All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.15.0] - 2026-11-11
+### Added
+- **Stop game**: a running instance can be closed from the launcher.
+- **Cancel download**: an in-progress modpack sync can be cancelled; files that already verified are kept and the next sync resumes from them.
+- **State recovery**: the launcher asks the backend which instances are running on startup, so a reloaded window shows the correct state.
+- **Game log tools**: copy the log, open the instance folder, and the log follows new output unless you scroll up.
+
+### Changed
+- **Central launcher state**: session, Discord status, per-instance sync / launch state, server status, settings and update checks now live in one store (`src/state/LauncherProvider.tsx`) with a single set of event listeners. Pages no longer keep their own copies, so state is consistent across tabs.
+- **Instance-tagged events**: `launch-status`, `game-state` and `game-log` carry the instance they belong to. Game output is delivered in batches (every 150 ms or 200 lines) instead of one event per line.
+- **Manifest-driven versions**: the Minecraft and NeoForge versions used at launch come from the synced modpack manifest, so a modpack update that bumps NeoForge no longer needs a launcher release.
+- **Shared UI components** (`src/components/ui`): Button, Modal, Alert, Badge, Switch, SegmentedControl, Card and page layout primitives replace per-page Tailwind strings. Colours and the minimum text size (11px) are theme tokens.
+- **Play page split** into `src/pages/play/*` (instance card, status area, log drawer, changelog modal); release notes rendering is shared between the Play page and News.
+- **Backend `sync` module split** into `download`, `manifest`, `packs`, `paths` and `state` submodules; event payloads are typed in `events.rs`.
+- When an account requirement blocks Play, the button now says what to do (**Sign in**, **Link Discord**, **Join Discord**) and opens the right place.
+- Launcher update checks run every 30 minutes instead of every 2 minutes.
+
+### Fixed
+- Dialogs close on Escape, trap keyboard focus and are announced to screen readers; every interactive element has a visible keyboard focus ring.
+- A crash on one instance is no longer attributed to whichever instance happened to be selected.
+- A failed launcher update now shows its error instead of silently re-enabling the button.
+
 ## [1.14.2] - 2026-11-11
 ### Fixed
 - **Play launched the wrong modpack**: pressing **Play** or **Update** on a card that was not the selected one launched (or updated) the previously selected instance. Both actions now act on the card that was clicked.

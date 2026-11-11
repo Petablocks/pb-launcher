@@ -86,6 +86,11 @@ export const setModEnabled = (instanceId: string, slug: string, enabled: boolean
 export const syncInstance = (instanceId: string, manifestUrl: string) =>
   invoke<InstanceState>("sync_instance", { instanceId, manifestUrl });
 
+/** Matches the backend's cancellation error so the UI can treat it as a non-error. */
+export const SYNC_CANCELLED = "Sync cancelled.";
+
+export const cancelSync = (instanceId: string) => invoke<void>("sync_cancel", { instanceId });
+
 export const listCustomMods = (instanceId: string) =>
   inTauri ? invoke<CustomModFile[]>("sync_list_custom_mods", { instanceId }) : Promise.resolve([]);
 
@@ -121,18 +126,3 @@ export const onPlaytimeUpdated = (
   inTauri
     ? listen<[string, InstanceState]>("playtime-updated", (e) => cb(e.payload[0], e.payload[1]))
     : Promise.resolve(() => {});
-
-export function formatPlaytime(seconds = 0): string {
-  if (seconds < 60) return "0m";
-  const hrs = Math.floor(seconds / 3600);
-  const mins = Math.floor((seconds % 3600) / 60);
-  if (hrs === 0) return `${mins}m`;
-  return `${hrs}h ${mins}m`;
-}
-
-export function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  const kb = bytes / 1024;
-  if (kb < 1024) return `${kb.toFixed(1)} KB`;
-  return `${(kb / 1024).toFixed(2)} MB`;
-}

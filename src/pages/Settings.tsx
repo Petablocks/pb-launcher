@@ -11,7 +11,6 @@ import {
   Server,
 } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
-import { INSTANCES } from "../instances";
 import {
   JavaStatus,
   LauncherSettings,
@@ -19,20 +18,14 @@ import {
   getInstanceDir,
   getSettings,
   installJava21,
-  saveSettings,
 } from "../launch";
+import { useLauncher, useManagedInstance } from "../state/LauncherProvider";
 import { inTauri } from "../auth";
 import { DiscordLogo } from "../components/BrandIcons";
 
-export default function Settings({
-  selectedInstanceId = "petablocks-s2",
-  onSettingsSaved,
-}: {
-  selectedInstanceId?: string;
-  onSettingsSaved?: (settings: LauncherSettings) => void;
-}) {
-  const instance =
-    INSTANCES.find((i) => i.id === selectedInstanceId) ?? INSTANCES[0];
+export default function Settings() {
+  const instance = useManagedInstance();
+  const { saveSettings } = useLauncher();
   const [settings, setSettings] = useState<LauncherSettings>({
     memoryMb: 6144,
     customJavaPath: null,
@@ -69,7 +62,6 @@ export default function Settings({
     setError(null);
     try {
       await saveSettings(settings);
-      onSettingsSaved?.(settings);
       const j = await detectJava();
       setJava(j);
       setSavedNotice(true);
@@ -185,7 +177,7 @@ export default function Settings({
               <button
                 onClick={handleInstallJava}
                 disabled={installingJava || !inTauri}
-                className="inline-flex items-center gap-2 rounded-lg bg-pb-cyan px-3.5 py-1.5 text-xs font-extrabold text-[#031617] hover:brightness-110 disabled:opacity-50"
+                className="inline-flex items-center gap-2 rounded-lg bg-pb-cyan px-3.5 py-1.5 text-xs font-extrabold text-pb-ink hover:brightness-110 disabled:opacity-50"
               >
                 {installingJava ? (
                   <>
@@ -208,7 +200,7 @@ export default function Settings({
                 <CheckCircle2 size={15} /> Java 21 Ready ({java.source})
               </div>
               <div className="font-mono text-pb-muted">{java.version}</div>
-              <div className="truncate font-mono text-[11px] text-pb-muted/80">{java.path}</div>
+              <div className="truncate font-mono text-2xs text-pb-muted/80">{java.path}</div>
             </div>
           ) : (
             <div className="text-pb-muted">
@@ -272,9 +264,9 @@ export default function Settings({
                       </span>
                       {active && <CheckCircle2 size={13} className="text-pb-cyan shrink-0 ml-1" />}
                     </div>
-                    <p className="mt-1 text-[11px] leading-relaxed text-pb-muted">{p.desc}</p>
+                    <p className="mt-1 text-2xs leading-relaxed text-pb-muted">{p.desc}</p>
                   </div>
-                  <div className="mt-3 flex items-center justify-between border-t border-white/5 pt-2 text-[10px] font-mono text-pb-muted">
+                  <div className="mt-3 flex items-center justify-between border-t border-white/5 pt-2 text-2xs font-mono text-pb-muted">
                     <span>RAM: {p.ramMb / 1024} GB</span>
                     <span className="text-pb-mint/80">{p.id === "enthusiast" ? "ZGC Gen" : "G1GC"}</span>
                   </div>
@@ -304,7 +296,7 @@ export default function Settings({
             }
             className="mt-2 w-full accent-pb-cyan"
           />
-          <div className="mt-1 flex justify-between text-[11px] text-pb-muted font-mono">
+          <div className="mt-1 flex justify-between text-2xs text-pb-muted font-mono">
             <span>3 GB</span>
             <span>6 GB (Eco)</span>
             <span>8 GB (Std)</span>
@@ -373,7 +365,7 @@ export default function Settings({
             }`}
           >
             <span
-              className={`inline-block h-4 w-4 transform rounded-full bg-[#031617] transition ${
+              className={`inline-block h-4 w-4 transform rounded-full bg-pb-ink transition ${
                 settings.directConnect ? "translate-x-6" : "translate-x-1 bg-white"
               }`}
             />
@@ -400,7 +392,7 @@ export default function Settings({
             }`}
           >
             <span
-              className={`inline-block h-4 w-4 transform rounded-full bg-[#031617] transition ${
+              className={`inline-block h-4 w-4 transform rounded-full bg-pb-ink transition ${
                 settings.closeOnLaunch ? "translate-x-6" : "translate-x-1 bg-white"
               }`}
             />
@@ -416,7 +408,7 @@ export default function Settings({
               <div className="flex items-center gap-2 text-sm font-bold">
                 <span>Release Update Channel</span>
                 {(settings.updateChannel ?? "stable") === "staging" && (
-                  <span className="rounded bg-amber-400/20 px-1.5 py-0.5 text-[10px] font-extrabold tracking-wider text-amber-300">
+                  <span className="rounded bg-amber-400/20 px-1.5 py-0.5 text-2xs font-extrabold tracking-wider text-amber-300">
                     STAGING
                   </span>
                 )}
@@ -433,7 +425,7 @@ export default function Settings({
               onClick={() => setSettings({ ...settings, updateChannel: "stable" })}
               className={`cursor-pointer rounded-lg px-3 py-1.5 text-xs font-bold transition ${
                 (settings.updateChannel ?? "stable") === "stable"
-                  ? "bg-pb-cyan text-[#031617]"
+                  ? "bg-pb-cyan text-pb-ink"
                   : "text-pb-muted hover:text-white"
               }`}
             >
@@ -468,7 +460,7 @@ export default function Settings({
         )}
         <button
           onClick={handleSave}
-          className="inline-flex cursor-pointer items-center gap-2 rounded-xl bg-pb-cyan px-6 py-2.5 text-sm font-extrabold text-[#031617] hover:brightness-110"
+          className="inline-flex cursor-pointer items-center gap-2 rounded-xl bg-pb-cyan px-6 py-2.5 text-sm font-extrabold text-pb-ink hover:brightness-110"
         >
           <Save size={16} /> Save Settings
         </button>

@@ -1,6 +1,6 @@
 # PETABLOCKS Launcher
 
-**Version**: `v1.14.2` - Official Minecraft launcher for the [PETABLOCKS](https://petablocks.com) network.
+**Version**: `v1.15.0` - Official Minecraft launcher for the [PETABLOCKS](https://petablocks.com) network.
 
 Built with Tauri v2 (Rust) + React 19 + TypeScript + Tailwind CSS v4, using the official `petablocks-brand` design tokens.
 
@@ -12,6 +12,17 @@ All phases complete: frameless transparent startup splash screen with automatic 
 | --- | --- | --- | --- |
 | **PETABLOCKS Season 2** | `s2.petablocks.com` | `1.21.1` / NeoForge `21.1.259` | `launcher-manifest.json` via `Petablocks/pb-modpacks` |
 | **PETABLOCKS Create 2** | `create2.petablocks.com` | `1.21.1` / NeoForge `21.1.233` | `launcher-manifest-create2.json` via `Petablocks/pb-modpacks` |
+
+## Architecture
+| Area | Location | Notes |
+| --- | --- | --- |
+| Launcher state | `src/state/` | `LauncherProvider` holds session, per-instance runtime, settings and updates; `logStore` holds game output; `access` resolves why an instance cannot be launched. |
+| UI primitives | `src/components/ui/` | Button, Modal, Alert, Badge, Switch, SegmentedControl, Card / page layout. Use these instead of ad-hoc class strings. |
+| Pages | `src/pages/`, `src/pages/play/` | One file per tab; the Play tab is split into focused components. |
+| Backend commands | `src-tauri/src/lib.rs` | Thin `#[tauri::command]` wrappers. |
+| Sync engine | `src-tauri/src/sync/` | `download` (allowlist + verified streaming), `manifest`, `state`, `packs`, `paths`; `mod.rs` orchestrates a sync. |
+| Launch engine | `src-tauri/src/launch.rs` | Vanilla + NeoForge setup, process lifecycle, playtime, batched logs. |
+| Events | `src-tauri/src/events.rs` | Typed, instance-tagged payloads for `launch-status`, `game-state`, `game-log`. |
 
 ## Development
 Requires Node 20+, Rust (stable, MSVC) and the Visual Studio C++ Build Tools.

@@ -222,7 +222,7 @@ pub fn list_screenshots(instance_id: &str) -> Result<Vec<ScreenshotItem>, String
         }
     }
 
-    items.sort_by(|a, b| b.modified_epoch.cmp(&a.modified_epoch));
+    items.sort_by_key(|i| std::cmp::Reverse(i.modified_epoch));
     Ok(items)
 }
 

@@ -46,6 +46,9 @@ const DEFAULT_SETTINGS: LauncherSettings = {
   updateChannel: "stable",
 };
 
+export const getSystemMemoryMb = (): Promise<number> =>
+  inTauri ? invoke<number>("system_memory_mb") : Promise.resolve(0);
+
 export const getSettings = (): Promise<LauncherSettings> =>
   inTauri ? invoke<LauncherSettings>("settings_get") : Promise.resolve(DEFAULT_SETTINGS);
 
@@ -65,11 +68,41 @@ export const launchInstance = (req: LaunchRequest): Promise<void> =>
 export const getInstanceDir = (instanceId: string): Promise<string> =>
   invoke<string>("open_instance_dir", { instanceId });
 
-export const onLaunchStatus = (cb: (status: string) => void): Promise<UnlistenFn> =>
-  inTauri ? listen<string>("launch-status", (e) => cb(e.payload)) : Promise.resolve(() => {});
+/** `instanceId` is null for launcher-wide notices. */
+export interface LaunchStatusEvent {
+  instanceId: string | null;
+  message: string;
+}
 
-export const onGameState = (cb: (state: string) => void): Promise<UnlistenFn> =>
-  inTauri ? listen<string>("game-state", (e) => cb(e.payload)) : Promise.resolve(() => {});
+export interface GameStateEvent {
+  instanceId: string;
+  state: "running" | "stopped";
+  exitCode: number | null;
+  stoppedByUser: boolean;
+}
 
-export const onGameLog = (cb: (entry: GameLogLine) => void): Promise<UnlistenFn> =>
-  inTauri ? listen<GameLogLine>("game-log", (e) => cb(e.payload)) : Promise.resolve(() => {});
+export interface GameLogBatch {
+  instanceId: string;
+  lines: GameLogLine[];
+}
+
+export const stopGame = (instanceId: string): Promise<void> =>
+  invoke<void>("game_stop", { instanceId });
+
+export const getRunningInstances = (): Promise<string[]> =>
+  inTauri ? invoke<string[]>("game_running") : Promise.resolve([]);
+
+export const onLaunchStatus = (cb: (e: LaunchStatusEvent) => void): Promise<UnlistenFn> =>
+  inTauri
+    ? listen<LaunchStatusEvent>("launch-status", (e) => cb(e.payload))
+    : Promise.resolve(() => {});
+
+export const onGameState = (cb: (e: GameStateEvent) => void): Promise<UnlistenFn> =>
+  inTauri
+    ? listen<GameStateEvent>("game-state", (e) => cb(e.payload))
+    : Promise.resolve(() => {});
+
+export const onGameLog = (cb: (batch: GameLogBatch) => void): Promise<UnlistenFn> =>
+  inTauri
+    ? listen<GameLogBatch>("game-log", (e) => cb(e.payload))
+    : Promise.resolve(() => {});
