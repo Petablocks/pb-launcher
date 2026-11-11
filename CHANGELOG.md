@@ -3,6 +3,69 @@
 All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.17.0] - 2026-11-11
+### Added
+- **Remote launcher config** (`launcher-config.json`): the instance list (servers, versions, manifest and changelog links, access policy, artwork), the footer headline and the News announcements are fetched from this repository, cached, and fall back to the copy bundled with the launcher. Adding a server, changing a link or posting news no longer needs a launcher release.
+- **Signed launcher updates**: builds made with an update signing key only install an update when the release carries a valid signature for the installer, in addition to the existing SHA-256 check.
+- **Pull request checks**: typecheck, lint and build for the frontend; formatting, Clippy and unit tests for the backend.
+
+### Changed
+- The Closed Beta access check in the launch backend now follows each instance's `accessPolicy` from the launcher config; unknown instances stay gated.
+- Release builds can be Authenticode-signed when a certificate is configured.
+
+### Infrastructure
+- `release.yml` carries forward the newest published `s2-*` and `create2-*` modpack releases instead of pinned versions, signs the installer for the in-app updater when `PB_UPDATE_SIGNING_KEY` is set, supports optional Authenticode signing, and pins `tauri-action` to a commit.
+- New `ci.yml` workflow for pull requests and pushes to `master`.
+- ESLint (`npm run lint`) with the React Hooks rules; TypeScript now rejects unused locals and parameters.
+- The live server ping test is opt-in (`cargo test -- --ignored`) so unit tests no longer depend on the network.
+
+## [1.16.0] - 2026-11-11
+### Added
+- **Getting-started checklist** on the Play tab for new players: sign in with Microsoft, link Discord (when a closed beta server needs it), then install and play. It disappears once the account is ready and a modpack is installed.
+
+### Changed
+- **Redesigned Play tab**: the selected server is a large hero with one primary button, and the other servers sit in a compact row underneath. Selecting a server moves it into the hero.
+- **One status area**: download progress (with Cancel), launch status, the running state (with Stop game), crashes, errors and modpack updates now appear in a single place inside the hero, one message at a time by priority, instead of stacking banners under the grid.
+- **Settings save automatically**. The Save button is gone; a "Saved" indicator confirms each change, and edits still pending when you leave the page are flushed.
+- **Plainer settings**: performance presets are named Light / Recommended / High-end with their memory size, presets that need more RAM than the PC has are disabled, and JVM arguments, the custom Java path and the fallback report webhook moved into a collapsed Advanced section.
+- The sidebar support link is now a quiet text link; the full support card lives under News → Announcements.
+- The sign-in dialog stays open after signing in so Discord linking can be finished in the same place, and offers a direct **Join the Discord server** button when the account is linked but not yet a member.
+
+## [1.15.0] - 2026-11-11
+### Added
+- **Stop game**: a running instance can be closed from the launcher.
+- **Cancel download**: an in-progress modpack sync can be cancelled; files that already verified are kept and the next sync resumes from them.
+- **State recovery**: the launcher asks the backend which instances are running on startup, so a reloaded window shows the correct state.
+- **Game log tools**: copy the log, open the instance folder, and the log follows new output unless you scroll up.
+
+### Changed
+- **Central launcher state**: session, Discord status, per-instance sync / launch state, server status, settings and update checks now live in one store (`src/state/LauncherProvider.tsx`) with a single set of event listeners. Pages no longer keep their own copies, so state is consistent across tabs.
+- **Instance-tagged events**: `launch-status`, `game-state` and `game-log` carry the instance they belong to. Game output is delivered in batches (every 150 ms or 200 lines) instead of one event per line.
+- **Manifest-driven versions**: the Minecraft and NeoForge versions used at launch come from the synced modpack manifest, so a modpack update that bumps NeoForge no longer needs a launcher release.
+- **Shared UI components** (`src/components/ui`): Button, Modal, Alert, Badge, Switch, SegmentedControl, Card and page layout primitives replace per-page Tailwind strings. Colours and the minimum text size (11px) are theme tokens.
+- **Play page split** into `src/pages/play/*` (instance card, status area, log drawer, changelog modal); release notes rendering is shared between the Play page and News.
+- **Backend `sync` module split** into `download`, `manifest`, `packs`, `paths` and `state` submodules; event payloads are typed in `events.rs`.
+- When an account requirement blocks Play, the button now says what to do (**Sign in**, **Link Discord**, **Join Discord**) and opens the right place.
+- Launcher update checks run every 30 minutes instead of every 2 minutes.
+
+### Fixed
+- Dialogs close on Escape, trap keyboard focus and are announced to screen readers; every interactive element has a visible keyboard focus ring.
+- A crash on one instance is no longer attributed to whichever instance happened to be selected.
+- A failed launcher update now shows its error instead of silently re-enabling the button.
+
+## [1.14.2] - 2026-11-11
+### Fixed
+- **Play launched the wrong modpack**: pressing **Play** or **Update** on a card that was not the selected one launched (or updated) the previously selected instance. Both actions now act on the card that was clicked.
+- **Play buttons hidden at narrow window widths**: between the minimum window width and 1024px the instance grid collapsed to a single column and clipped the logos and Play buttons. The grid now stays two columns and the card footer wraps.
+- **Launch state lost when switching tabs**: the Play tab now stays mounted, so launching / running state, live game logs and crash prompts survive a visit to another tab.
+- **Create 2 required Discord despite being public**: the instance `accessPolicy` is now honoured in both the UI and the launch backend. Season 2 keeps its Closed Beta gate.
+- **Bundled fonts**: Inter and JetBrains Mono are now shipped with the launcher. They were previously requested from Google Fonts, which the app's Content Security Policy blocks, so installed builds fell back to system fonts.
+- **Discord Rich Presence** now shows the instance actually being played instead of always "PETABLOCKS Season 2".
+- **Stuck "Running" state**: the running state is only reported once the Minecraft process has spawned, so a failed spawn no longer leaves the Play button disabled.
+
+### Changed
+- Removed the unused `AccountCard` component (superseded by the sidebar account pill).
+
 ## [1.14.1] - 2026-11-10
 ### Fixed
 - **Modpack Overrides Download Resolution**:

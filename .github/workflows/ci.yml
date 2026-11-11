@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  frontend:
+    name: Frontend (typecheck, lint, build)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Versions agree across package.json, Cargo.toml, tauri.conf.json and version.ts
+        run: |
+          v=$(node -p "require('./package.json').version")
+          grep -q "^version = \"$v\"" src-tauri/Cargo.toml || { echo "Cargo.toml version != $v"; exit 1; }
+          grep -q "\"version\": \"$v\"" src-tauri/tauri.conf.json || { echo "tauri.conf.json version != $v"; exit 1; }
+          grep -q "\"$v\"" src/version.ts || { echo "src/version.ts version != $v"; exit 1; }
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npx vite build
+
+  backend:
+    name: Backend (fmt, clippy, tests)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2.7.5
+        with:
+          workspaces: "./src-tauri -> target"
+      # tauri's build script expects the frontend output directory to exist.
+      - run: mkdir dist
+      - run: cargo fmt --manifest-path src-tauri/Cargo.toml --check
+      - run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
+      - run: cargo test --manifest-path src-tauri/Cargo.toml

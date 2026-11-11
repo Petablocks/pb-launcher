@@ -48,7 +48,7 @@ export default function SplashScreen() {
 
         // Step 3: Check Modpack Manifest & Java 21 runtime in parallel
         if (!cancelled) {
-          setStatus("Syncing Season 2 manifest & Java 21 runtime...");
+          setStatus("Checking modpacks and Java...");
           setProgress(74);
         }
         if (inTauri) {
@@ -105,14 +105,14 @@ export default function SplashScreen() {
           <span className="font-minecraft text-base tracking-[0.22em] pb-text-gradient-purple drop-shadow-[0_2px_10px_rgba(168,36,255,0.6)]">
             LAUNCHER
           </span>
-          <span className="rounded-md border border-pb-purple/50 bg-[#0B0F19]/90 px-1.5 py-0.5 text-[10px] font-extrabold tracking-widest text-pb-purple shadow-lg">
+          <span className="rounded-md border border-pb-purple/50 bg-pb-bg/90 px-1.5 py-0.5 text-2xs font-extrabold tracking-widest text-pb-purple shadow-lg">
             BETA v{APP_VERSION}
           </span>
         </div>
       </div>
 
       {/* Floating glass status pill & progress bar */}
-      <div className="relative z-10 mt-6 w-80 overflow-hidden rounded-2xl border border-white/15 bg-[#0B0F19]/90 px-4 py-3 shadow-[0_16px_40px_rgba(0,0,0,0.75)] backdrop-blur-xl">
+      <div className="relative z-10 mt-6 w-80 overflow-hidden rounded-2xl border border-white/15 bg-pb-bg/90 px-4 py-3 shadow-[0_16px_40px_rgba(0,0,0,0.75)] backdrop-blur-xl">
         <div className="flex items-center justify-between gap-2 text-xs">
           <span className="flex items-center gap-2 truncate font-semibold text-white">
             {updatingTo ? (
@@ -122,7 +122,7 @@ export default function SplashScreen() {
             )}
             <span className="truncate">{status}</span>
           </span>
-          <span className="font-mono text-[11px] font-bold text-pb-cyan">{progress}%</span>
+          <span className="font-mono text-2xs font-bold text-pb-cyan">{progress}%</span>
         </div>
 
         <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-white/10">

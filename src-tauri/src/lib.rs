@@ -1,5 +1,7 @@
 mod auth;
 mod community;
+mod config;
+mod events;
 mod java;
 mod launch;
 mod ping;
@@ -17,7 +19,7 @@ use launch::LaunchRequest;
 use ping::ServerStatus;
 use settings::LauncherSettings;
 use sync::{CustomModFile, InstanceState, LauncherManifest, PackEntry};
-use tauri::{AppHandle, Emitter, Manager, WindowEvent};
+use tauri::{AppHandle, Manager, WindowEvent};
 use tauri_plugin_opener::OpenerExt;
 use updater::LauncherUpdateInfo;
 
@@ -184,7 +186,7 @@ async fn java_detect() -> Result<JavaStatus, String> {
 
 #[tauri::command]
 async fn java_install(app: AppHandle) -> Result<JavaStatus, String> {
-    java::ensure_java_21(&app).await?;
+    java::ensure_java_21(&app, None).await?;
     tokio::task::spawn_blocking(java::detect_java)
         .await
         .map_err(|e| e.to_string())
@@ -193,6 +195,30 @@ async fn java_install(app: AppHandle) -> Result<JavaStatus, String> {
 #[tauri::command]
 async fn launch_instance(app: AppHandle, req: LaunchRequest) -> Result<(), String> {
     launch::launch_game(app, req).await
+}
+
+/// Instance list, ticker and announcements (remote, cached, or bundled as a last resort).
+#[tauri::command]
+async fn launcher_config_get() -> config::LauncherConfig {
+    config::load_config().await
+}
+
+/// Ends a running game process started by this launcher.
+#[tauri::command]
+fn game_stop(instance_id: String) -> Result<(), String> {
+    launch::stop_game(&instance_id)
+}
+
+/// Instance IDs with a live game process (lets the UI recover its state after a reload).
+#[tauri::command]
+fn game_running() -> Vec<String> {
+    launch::running_instances()
+}
+
+/// Cancels an in-flight modpack sync. Already-downloaded files are kept for the next sync.
+#[tauri::command]
+fn sync_cancel(instance_id: String) -> Result<(), String> {
+    sync::cancel_sync(&instance_id)
 }
 
 #[tauri::command]
@@ -225,7 +251,9 @@ async fn screenshots_list(
         .await
         .map_err(|e| e.to_string())??;
     let shots_dir = sync::instance_dir(&inst_for_scope).join("screenshots");
-    let _ = app.asset_protocol_scope().allow_directory(&shots_dir, false);
+    let _ = app
+        .asset_protocol_scope()
+        .allow_directory(&shots_dir, false);
     Ok(list)
 }
 
@@ -384,10 +412,10 @@ pub fn run() {
                 if let WindowEvent::CloseRequested { api, .. } = event {
                     if sync::is_any_sync_active() {
                         api.prevent_close();
-                        let _ = window.emit(
-                            "launch-status",
-                            "Please wait for the active modpack download to finish before closing."
-                                .to_string(),
+                        events::emit_launch_status(
+                            window.app_handle(),
+                            None,
+                            "Please wait for the active modpack download to finish before closing.",
                         );
                     }
                 }
@@ -428,7 +456,11 @@ pub fn run() {
             system_memory_mb,
             java_detect,
             java_install,
+            launcher_config_get,
             launch_instance,
+            game_stop,
+            game_running,
+            sync_cancel,
             open_instance_dir,
             server_ping,
             screenshots_list,

@@ -6,14 +6,16 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::sync::Arc;
+use std::sync::{LazyLock, Mutex};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Emitter, Manager};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command as TokioCommand;
-use tokio::sync::Semaphore;
+use tokio::sync::{Notify, Semaphore};
 use tokio::task::JoinSet;
 
 use crate::auth::{get_active_mc_session, Session};
+use crate::events::{emit_game_state, emit_launch_status, GameLogBatch, GameLogLine};
 use crate::java::ensure_java_21;
 use crate::settings::load_settings;
 use crate::sync::{
@@ -33,14 +35,58 @@ pub struct LaunchRequest {
     pub neoforge_version: String,
     pub server_address: String,
     pub session: Session,
+    /// Display name used for Discord Rich Presence (falls back to a generic label).
+    #[serde(default)]
+    pub instance_name: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct GameLogLine {
-    pub line: String,
-    pub is_error: bool,
+/// Sanitised Rich Presence headline for the instance being played.
+fn rpc_details(instance_name: Option<&str>) -> String {
+    let name: String = instance_name
+        .unwrap_or("")
+        .chars()
+        .filter(|c| !c.is_control())
+        .take(64)
+        .collect();
+    let name = name.trim();
+    if name.is_empty() {
+        "Playing PETABLOCKS".to_string()
+    } else {
+        format!("Playing {name}")
+    }
 }
+
+/// Running game processes keyed by instance ID. Notifying the handle asks the exit watcher
+/// to terminate that process.
+static RUNNING_GAMES: LazyLock<Mutex<HashMap<String, Arc<Notify>>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+
+pub fn running_instances() -> Vec<String> {
+    RUNNING_GAMES
+        .lock()
+        .map(|g| g.keys().cloned().collect())
+        .unwrap_or_default()
+}
+
+pub fn stop_game(instance_id: &str) -> Result<(), String> {
+    let handle = RUNNING_GAMES
+        .lock()
+        .map_err(|_| "Internal lock poisoned".to_string())?
+        .get(instance_id)
+        .cloned();
+    match handle {
+        Some(stop) => {
+            stop.notify_one();
+            Ok(())
+        }
+        None => Err("That instance is not running.".into()),
+    }
+}
+
+/// Maximum number of log lines buffered before a batch is flushed early.
+const LOG_BATCH_MAX_LINES: usize = 200;
+/// How often buffered game output is flushed to the UI.
+const LOG_BATCH_INTERVAL_MS: u64 = 150;
 
 fn rule_allows_windows(rules: Option<&Vec<Value>>) -> bool {
     let Some(rules) = rules else {
@@ -106,14 +152,13 @@ async fn ensure_file(
 
 async fn setup_vanilla(
     app: &AppHandle,
+    instance_id: &str,
     client: &Client,
     mc_version: &str,
     root: &Path,
 ) -> Result<Value, String> {
     validate_version_token("minecraft_version", mc_version)?;
-    let emit = |msg: &str| {
-        let _ = app.emit("launch-status", msg.to_string());
-    };
+    let emit = |msg: &str| emit_launch_status(app, Some(instance_id), msg);
 
     let version_dir = root.join("versions").join(mc_version);
     let version_json_path = version_dir.join(format!("{mc_version}.json"));
@@ -226,10 +271,7 @@ async fn setup_vanilla(
     }
 
     if !asset_tasks.is_empty() {
-        emit(&format!(
-            "Downloading {} game assets...",
-            asset_tasks.len()
-        ));
+        emit(&format!("Downloading {} game assets...", asset_tasks.len()));
         download_batch(client, asset_tasks).await?;
     }
 
@@ -268,6 +310,7 @@ async fn download_batch(
 
 async fn setup_neoforge(
     app: &AppHandle,
+    instance_id: &str,
     client: &Client,
     java_exe: &Path,
     neoforge_version: &str,
@@ -279,9 +322,10 @@ async fn setup_neoforge(
     let nf_json_path = nf_version_dir.join(format!("{profile_id}.json"));
 
     if !nf_json_path.exists() {
-        let _ = app.emit(
-            "launch-status",
-            format!("Installing NeoForge {neoforge_version} client (one-time setup)..."),
+        emit_launch_status(
+            app,
+            Some(instance_id),
+            &format!("Installing NeoForge {neoforge_version} client (one-time setup)..."),
         );
 
         let profiles_path = root.join("launcher_profiles.json");
@@ -461,9 +505,31 @@ fn assign_child_to_job_object(pid: u32) {
     }
 }
 
-pub async fn launch_game(app: AppHandle, req: LaunchRequest) -> Result<(), String> {
+/// The synced modpack manifest is the source of truth for the Minecraft and NeoForge versions,
+/// so a modpack update that bumps the loader needs no launcher release. The request values
+/// are only used when no (valid) manifest has been cached yet.
+fn apply_manifest_versions(
+    req: &mut LaunchRequest,
+    manifest: Option<&crate::sync::LauncherManifest>,
+) {
+    let Some(m) = manifest else {
+        return;
+    };
+    let mc = m.minecraft.trim();
+    if validate_version_token("minecraft_version", mc).is_ok() {
+        req.minecraft_version = mc.to_string();
+    }
+    let nf = m.neoforge.trim();
+    if validate_version_token("neoforge_version", nf).is_ok() {
+        req.neoforge_version = nf.to_string();
+    }
+}
+
+pub async fn launch_game(app: AppHandle, mut req: LaunchRequest) -> Result<(), String> {
     // 1. Validate all version and instance identifiers before touching the filesystem
     validate_version_token("instance_id", &req.instance_id)?;
+    let cached_manifest = crate::sync::load_cached_manifest(&req.instance_id);
+    apply_manifest_versions(&mut req, cached_manifest.as_ref());
     validate_version_token("minecraft_version", &req.minecraft_version)?;
     if !req.neoforge_version.trim().is_empty() {
         validate_version_token("neoforge_version", &req.neoforge_version)?;
@@ -479,7 +545,10 @@ pub async fn launch_game(app: AppHandle, req: LaunchRequest) -> Result<(), Strin
                 .into(),
         );
     };
-    if req.session.offline || verified_profile.uuid.trim().is_empty() || mc_access_token.trim().is_empty() {
+    if req.session.offline
+        || verified_profile.uuid.trim().is_empty()
+        || mc_access_token.trim().is_empty()
+    {
         return Err(
             "Launch blocked: Your Minecraft session is offline or expired. Please sign in again."
                 .into(),
@@ -487,12 +556,15 @@ pub async fn launch_game(app: AppHandle, req: LaunchRequest) -> Result<(), Strin
     }
 
     // 4. Backend enforcement of Closed Beta Discord link & guild membership
-    if let Ok(discord) = crate::community::check_discord_link(&verified_profile.uuid).await {
-        if !discord.linked || !discord.in_guild {
-            return Err(
-                "Launch blocked: Please link your Discord account and join the PETABLOCKS Discord server to play."
-                    .into(),
-            );
+    //    (skipped for instances whose access policy is public)
+    if crate::config::instance_requires_discord(&req.instance_id) {
+        if let Ok(discord) = crate::community::check_discord_link(&verified_profile.uuid).await {
+            if !discord.linked || !discord.in_guild {
+                return Err(
+                    "Launch blocked: Please link your Discord account and join the PETABLOCKS Discord server to play."
+                        .into(),
+                );
+            }
         }
     }
 
@@ -502,14 +574,29 @@ pub async fn launch_game(app: AppHandle, req: LaunchRequest) -> Result<(), Strin
     fs::create_dir_all(&game_dir).map_err(|e| e.to_string())?;
 
     // 5. Ensure Java 21
-    let java_exe = crate::java::cli_java(&ensure_java_21(&app).await?);
+    let java_exe = crate::java::cli_java(&ensure_java_21(&app, Some(&req.instance_id)).await?);
 
     // 6. Ensure Vanilla 1.21.1 + assets
     let client = http_client();
-    let vanilla_json = setup_vanilla(&app, client, &req.minecraft_version, &root).await?;
+    let vanilla_json = setup_vanilla(
+        &app,
+        &req.instance_id,
+        client,
+        &req.minecraft_version,
+        &root,
+    )
+    .await?;
 
     // 7. Ensure NeoForge
-    let nf_json = setup_neoforge(&app, client, &java_exe, &req.neoforge_version, &root).await?;
+    let nf_json = setup_neoforge(
+        &app,
+        &req.instance_id,
+        client,
+        &java_exe,
+        &req.neoforge_version,
+        &root,
+    )
+    .await?;
 
     // 8. Construct Classpath & Arguments
     let libs_dir = root.join("libraries");
@@ -594,8 +681,11 @@ pub async fn launch_game(app: AppHandle, req: LaunchRequest) -> Result<(), Strin
         full_args.push(req.server_address.trim().to_string());
     }
 
-    let _ = app.emit("launch-status", "Starting Minecraft (NeoForge)...");
-    let _ = app.emit("game-state", "running");
+    emit_launch_status(
+        &app,
+        Some(&req.instance_id),
+        "Starting Minecraft (NeoForge)...",
+    );
 
     let mut mc_cmd = TokioCommand::new(&java_exe);
     mc_cmd
@@ -611,6 +701,14 @@ pub async fn launch_game(app: AppHandle, req: LaunchRequest) -> Result<(), Strin
         .spawn()
         .map_err(|e| format!("Failed to spawn Minecraft process: {e}"))?;
 
+    // Only report "running" once the JVM process actually exists, so a failed spawn
+    // can never leave the UI stuck in a running state.
+    let stop_signal = Arc::new(Notify::new());
+    if let Ok(mut running) = RUNNING_GAMES.lock() {
+        running.insert(req.instance_id.clone(), stop_signal.clone());
+    }
+    emit_game_state(&app, &req.instance_id, "running", None, false);
+
     let game_pid = child.id().unwrap_or_else(std::process::id);
     #[cfg(windows)]
     assign_child_to_job_object(game_pid);
@@ -620,6 +718,8 @@ pub async fn launch_game(app: AppHandle, req: LaunchRequest) -> Result<(), Strin
     let _ = app.emit("playtime-updated", (&req.instance_id, &initial_state));
 
     let server_addr = req.server_address.clone();
+    let rpc_headline = rpc_details(req.instance_name.as_deref());
+    let rpc_headline_tick = rpc_headline.clone();
     let rpc_start = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_secs())
@@ -627,7 +727,7 @@ pub async fn launch_game(app: AppHandle, req: LaunchRequest) -> Result<(), Strin
 
     // Non-blocking Discord RPC update via background IPC worker
     crate::community::update_discord_rpc_with_pid(
-        "Playing PETABLOCKS Season 2",
+        &rpc_headline,
         &format!("Connected to {server_addr}"),
         game_pid,
         Some(rpc_start),
@@ -665,7 +765,7 @@ pub async fn launch_game(app: AppHandle, req: LaunchRequest) -> Result<(), Strin
                     }
 
                     crate::community::update_discord_rpc_with_pid(
-                        "Playing PETABLOCKS Season 2",
+                        &rpc_headline_tick,
                         &format!("Connected to {server_addr}"),
                         game_pid,
                         Some(rpc_start),
@@ -687,8 +787,49 @@ pub async fn launch_game(app: AppHandle, req: LaunchRequest) -> Result<(), Strin
         }
     }
 
+    // Game output is forwarded through a channel and flushed to the UI in batches, so a
+    // chatty modded startup cannot flood the webview with one IPC event per line.
+    let (log_tx, mut log_rx) = tokio::sync::mpsc::unbounded_channel::<GameLogLine>();
+    {
+        let app_logs = app.clone();
+        let inst_logs = req.instance_id.clone();
+        tokio::spawn(async move {
+            let mut buf: Vec<GameLogLine> = Vec::new();
+            let mut tick =
+                tokio::time::interval(std::time::Duration::from_millis(LOG_BATCH_INTERVAL_MS));
+            let flush = |buf: &mut Vec<GameLogLine>| {
+                if !buf.is_empty() {
+                    let _ = app_logs.emit(
+                        "game-log",
+                        GameLogBatch {
+                            instance_id: inst_logs.clone(),
+                            lines: std::mem::take(buf),
+                        },
+                    );
+                }
+            };
+            loop {
+                tokio::select! {
+                    next = log_rx.recv() => match next {
+                        Some(line) => {
+                            buf.push(line);
+                            if buf.len() >= LOG_BATCH_MAX_LINES {
+                                flush(&mut buf);
+                            }
+                        }
+                        None => {
+                            flush(&mut buf);
+                            break;
+                        }
+                    },
+                    _ = tick.tick() => flush(&mut buf),
+                }
+            }
+        });
+    }
+
     if let Some(stdout) = child.stdout.take() {
-        let app_clone = app.clone();
+        let tx = log_tx.clone();
         let file_clone = log_file.clone();
         tokio::spawn(async move {
             let mut lines = BufReader::new(stdout).lines();
@@ -699,13 +840,16 @@ pub async fn launch_game(app: AppHandle, req: LaunchRequest) -> Result<(), Strin
                         let _ = writeln!(file, "{line}");
                     }
                 }
-                let _ = app_clone.emit("game-log", GameLogLine { line, is_error: false });
+                let _ = tx.send(GameLogLine {
+                    line,
+                    is_error: false,
+                });
             }
         });
     }
 
     if let Some(stderr) = child.stderr.take() {
-        let app_clone = app.clone();
+        let tx = log_tx.clone();
         let file_clone = log_file.clone();
         tokio::spawn(async move {
             let mut lines = BufReader::new(stderr).lines();
@@ -716,10 +860,14 @@ pub async fn launch_game(app: AppHandle, req: LaunchRequest) -> Result<(), Strin
                         let _ = writeln!(file, "[ERR] {line}");
                     }
                 }
-                let _ = app_clone.emit("game-log", GameLogLine { line, is_error: true });
+                let _ = tx.send(GameLogLine {
+                    line,
+                    is_error: true,
+                });
             }
         });
     }
+    drop(log_tx);
 
     let app_wait = app.clone();
     let inst_id = req.instance_id.clone();
@@ -727,7 +875,19 @@ pub async fn launch_game(app: AppHandle, req: LaunchRequest) -> Result<(), Strin
     tokio::spawn(async move {
         // Hold instance_guard until the JVM process exits so a second launch cannot start concurrently
         let _keep_guard = instance_guard;
-        let code = child.wait().await.ok().and_then(|s| s.code()).unwrap_or(-1);
+        let mut stopped_by_user = false;
+        let status = tokio::select! {
+            status = child.wait() => status,
+            _ = stop_signal.notified() => {
+                stopped_by_user = true;
+                let _ = child.kill().await;
+                child.wait().await
+            }
+        };
+        let code = status.ok().and_then(|s| s.code()).unwrap_or(-1);
+        if let Ok(mut running) = RUNNING_GAMES.lock() {
+            running.remove(&inst_id);
+        }
         let _ = rpc_tx.send(()).await;
         let remainder = last_saved_for_exit
             .lock()
@@ -752,7 +912,7 @@ pub async fn launch_game(app: AppHandle, req: LaunchRequest) -> Result<(), Strin
             let _ = main_win.unminimize();
             let _ = main_win.set_focus();
         }
-        let _ = app_wait.emit("game-state", format!("stopped:{code}"));
+        emit_game_state(&app_wait, &inst_id, "stopped", Some(code), stopped_by_user);
     });
 
     Ok(())
@@ -774,6 +934,43 @@ mod tests {
             "a/b/c/1.0/c-1.0-natives.zip"
         );
         assert!(maven_coord_to_path("bad:coord").is_none());
+    }
+
+    #[test]
+    fn manifest_versions_override_request() {
+        let mut req: LaunchRequest = serde_json::from_value(json!({
+            "instanceId": "petablocks-s2",
+            "minecraftVersion": "1.21.1",
+            "neoforgeVersion": "21.1.200",
+            "serverAddress": "s2.petablocks.com",
+            "session": { "profile": { "uuid": "u", "name": "n" }, "access_token": "", "offline": false }
+        }))
+        .unwrap();
+        let mut manifest: crate::sync::LauncherManifest = serde_json::from_value(json!({
+            "formatVersion": 2, "version": "1.0.0", "name": "x", "minecraft": "1.21.1",
+            "loader": "neoforge", "neoforge": "21.1.259", "mrpackUrl": "", "mods": []
+        }))
+        .unwrap();
+        apply_manifest_versions(&mut req, Some(&manifest));
+        assert_eq!(req.neoforge_version, "21.1.259");
+
+        // An invalid token in the manifest never replaces the validated request value.
+        manifest.neoforge = "../evil".into();
+        req.neoforge_version = "21.1.200".into();
+        apply_manifest_versions(&mut req, Some(&manifest));
+        assert_eq!(req.neoforge_version, "21.1.200");
+        apply_manifest_versions(&mut req, None);
+        assert_eq!(req.neoforge_version, "21.1.200");
+    }
+
+    #[test]
+    fn rpc_headline() {
+        assert_eq!(
+            rpc_details(Some("PETABLOCKS Create 2")),
+            "Playing PETABLOCKS Create 2"
+        );
+        assert_eq!(rpc_details(None), "Playing PETABLOCKS");
+        assert_eq!(rpc_details(Some("  ")), "Playing PETABLOCKS");
     }
 
     #[test]

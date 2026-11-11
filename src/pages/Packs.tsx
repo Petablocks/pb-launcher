@@ -1,83 +1,44 @@
 import { useEffect, useState } from "react";
-import {
-  CheckCircle2,
-  FolderOpen,
-  Palette,
-  RefreshCw,
-  Sparkles,
-  Sun,
-} from "lucide-react";
-import { INSTANCES } from "../instances";
-import {
-  PackEntry,
-  formatBytes,
-  listPacks,
-  openPacksDir,
-  setActiveShader,
-  setPackEnabled,
-} from "../sync";
+import { CheckCircle2, FolderOpen, Palette, RefreshCw, Sparkles, Sun } from "lucide-react";
 import { inTauri } from "../auth";
 import InstanceSelector from "../components/InstanceSelector";
+import { Alert, Badge, Button, Card, CardHeader, PageHeader, Switch, cn } from "../components/ui";
+import { formatBytes } from "../lib/format";
+import { useManagedInstance } from "../state/LauncherProvider";
+import { PackEntry, listPacks, openPacksDir, setActiveShader, setPackEnabled } from "../sync";
 
-interface PacksProps {
-  selectedInstanceId?: string;
-  onSelectInstance?: (id: string) => void;
-}
-
-export default function Packs({
-  selectedInstanceId = "petablocks-s2",
-  onSelectInstance,
-}: PacksProps) {
-  const instance =
-    INSTANCES.find((i) => i.id === selectedInstanceId) ?? INSTANCES[0];
+export default function Packs() {
+  const instance = useManagedInstance();
   const [packs, setPacks] = useState<PackEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  async function refresh() {
-    setLoading(true);
+  async function run(task: () => Promise<PackEntry[]>) {
     setError(null);
     try {
-      const list = await listPacks(instance.id);
-      setPacks(list);
+      setPacks(await task());
     } catch (e) {
       setError(String(e));
-    } finally {
-      setLoading(false);
     }
+  }
+
+  async function refresh() {
+    setLoading(true);
+    await run(() => listPacks(instance.id));
+    setLoading(false);
   }
 
   useEffect(() => {
     refresh();
+    // Reload only when the managed instance changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [instance.id]);
 
-  async function handleTogglePack(p: PackEntry) {
-    try {
-      const next = await setPackEnabled(instance.id, p.kind, p.filename, !p.enabled);
-      setPacks(next);
-    } catch (e) {
-      setError(String(e));
-    }
-  }
-
-  async function handleSelectShader(filename: string | null) {
-    try {
-      const next = await setActiveShader(instance.id, filename);
-      setPacks(next);
-    } catch (e) {
-      setError(String(e));
-    }
-  }
-
-  async function handleOpenFolder(kind: "shader" | "resourcepack") {
-    setError(null);
-    try {
-      await openPacksDir(instance.id, kind);
-    } catch (e) {
-      setError(String(e));
-    }
-  }
+  const togglePack = (p: PackEntry, enabled: boolean) =>
+    run(() => setPackEnabled(instance.id, p.kind, p.filename, enabled));
+  const selectShader = (filename: string | null) => run(() => setActiveShader(instance.id, filename));
+  const openFolder = (kind: PackEntry["kind"]) =>
+    openPacksDir(instance.id, kind).catch((e) => setError(String(e)));
 
   const shaders = packs.filter((p) => p.kind === "shader");
   const resourcePacks = packs.filter((p) => p.kind === "resourcepack");
@@ -85,167 +46,132 @@ export default function Packs({
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-extrabold">Shaders & Resource Packs</h1>
-            {onSelectInstance && (
-              <InstanceSelector
-                selectedInstanceId={instance.id}
-                onSelectInstance={onSelectInstance}
-              />
-            )}
-          </div>
-          <p className="mt-1 text-xs text-pb-muted">
-            Switch active Iris shaderpacks and manage resource packs for <strong className="text-white">{instance.name}</strong>.
-          </p>
-        </div>
-
-        <button
-          onClick={refresh}
-          disabled={loading}
-          className="inline-flex cursor-pointer items-center gap-1.5 rounded-xl border border-white/10 bg-pb-card px-3.5 py-2 text-xs font-bold text-pb-muted hover:text-white"
-        >
-          <RefreshCw size={14} className={loading ? "animate-spin text-pb-cyan" : ""} /> Refresh
-        </button>
-      </div>
+      <PageHeader
+        title="Shaders & Packs"
+        description={
+          <>
+            Choose the active shader and manage resource packs for{" "}
+            <strong className="text-white">{instance.name}</strong>.
+          </>
+        }
+        actions={
+          <Button
+            variant="ghost"
+            icon={<RefreshCw size={14} className={loading ? "animate-spin" : ""} />}
+            disabled={loading}
+            onClick={refresh}
+          >
+            Refresh
+          </Button>
+        }
+      >
+        <InstanceSelector />
+      </PageHeader>
 
       {error && (
-        <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-300">
+        <Alert tone="error" onDismiss={() => setError(null)}>
           {error}
-        </div>
+        </Alert>
       )}
 
-      {/* Shaderpacks Section */}
-      <section className="rounded-2xl border border-white/10 bg-pb-card p-6">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-pb-purple/15 text-pb-purple">
-              <Sun size={20} />
-            </div>
-            <div>
-              <h2 className="text-base font-bold">Iris Shaderpacks ({shaders.length})</h2>
-              <p className="text-xs text-pb-muted">
-                Select which shaderpack is active in `config/iris.properties`, or disable shaders for maximum FPS.
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2">
-            {activeShader && (
-              <button
-                onClick={() => handleSelectShader(null)}
-                className="cursor-pointer rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-pb-muted hover:text-white"
+      <Card>
+        <CardHeader
+          tone="purple"
+          icon={<Sun size={20} />}
+          title={`Shaders (${shaders.length})`}
+          description="Pick the shader Iris loads, or turn shaders off for the best frame rate."
+          actions={
+            <>
+              {activeShader && (
+                <Button size="sm" variant="ghost" onClick={() => selectShader(null)}>
+                  Turn shaders off
+                </Button>
+              )}
+              <Button
+                size="sm"
+                icon={<FolderOpen size={14} />}
+                disabled={!inTauri}
+                onClick={() => openFolder("shader")}
               >
-                Turn Shaders Off
-              </button>
-            )}
-            <button
-              onClick={() => handleOpenFolder("shader")}
-              disabled={!inTauri}
-              className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-white/10 bg-pb-bg px-3 py-1.5 text-xs font-semibold text-white hover:border-pb-cyan/50 hover:text-pb-cyan disabled:opacity-50"
-            >
-              <FolderOpen size={14} /> Open `shaderpacks`
-            </button>
-          </div>
-        </div>
-
+                Open folder
+              </Button>
+            </>
+          }
+        />
         <div className="mt-4 space-y-2.5">
           {shaders.length === 0 ? (
-            <div className="rounded-xl border border-white/5 bg-pb-bg p-4 text-xs text-pb-muted">
-              No shaderpacks found yet. Click <strong>Sync Modpack</strong> on the Play tab to install Complementary Reimagined & Unbound, or drop `.zip` shaderpacks into the `shaderpacks` folder.
-            </div>
+            <p className="rounded-xl border border-white/5 bg-pb-bg p-4 text-xs text-pb-muted">
+              No shaders installed yet. The bundled shaders arrive the first time you install the
+              modpack from the Play tab, or you can drop <code className="font-mono">.zip</code>{" "}
+              shaderpacks into the folder.
+            </p>
           ) : (
             shaders.map((s) => (
               <div
                 key={s.filename}
-                className={`flex items-center justify-between gap-4 rounded-xl border p-3.5 transition ${
-                  s.active
-                    ? "border-pb-cyan/50 bg-pb-cyan/10"
-                    : "border-white/5 bg-pb-bg hover:border-white/15"
-                }`}
+                className={cn(
+                  "flex items-center justify-between gap-4 rounded-xl border p-3.5 transition",
+                  s.active ? "border-pb-cyan/50 bg-pb-cyan/10" : "border-white/5 bg-pb-bg hover:border-white/15",
+                )}
               >
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
                     <span className="truncate text-sm font-bold text-white">{s.cleanName}</span>
                     {s.active && (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-pb-cyan/20 px-2 py-0.5 text-[10px] font-extrabold text-pb-cyan">
-                        <Sparkles size={10} /> ACTIVE IN IRIS
-                      </span>
+                      <Badge tone="cyan">
+                        <Sparkles size={10} /> Active
+                      </Badge>
                     )}
                   </div>
-                  <div className="mt-0.5 text-[11px] text-pb-muted">
-                    {s.filename} • {formatBytes(s.size)}
+                  <div className="mt-0.5 truncate text-2xs text-pb-muted">
+                    {s.filename} · {formatBytes(s.size)}
                   </div>
                 </div>
-
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => handleSelectShader(s.active ? null : s.filename)}
+                <div className="flex items-center gap-3">
+                  <Button
+                    size="sm"
+                    variant={s.active ? "primary" : "secondary"}
                     disabled={!s.enabled}
-                    className={`cursor-pointer rounded-lg px-3 py-1.5 text-xs font-extrabold transition ${
-                      s.active
-                        ? "bg-pb-cyan text-[#031617]"
-                        : "border border-white/10 bg-white/5 text-white hover:border-pb-cyan/40 hover:text-pb-cyan disabled:opacity-40"
-                    }`}
+                    icon={s.active ? <CheckCircle2 size={13} /> : undefined}
+                    onClick={() => selectShader(s.active ? null : s.filename)}
                   >
-                    {s.active ? (
-                      <span className="inline-flex items-center gap-1">
-                        <CheckCircle2 size={13} /> Active
-                      </span>
-                    ) : (
-                      "Activate Shader"
-                    )}
-                  </button>
-                  <button
-                    onClick={() => handleTogglePack(s)}
-                    className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full transition ${
-                      s.enabled ? "bg-pb-mint" : "bg-white/15"
-                    }`}
-                    title={s.enabled ? "Enabled on disk" : "Disabled (.disabled)"}
-                  >
-                    <span
-                      className={`inline-block h-4 w-4 transform rounded-full bg-[#031617] transition ${
-                        s.enabled ? "translate-x-6" : "translate-x-1 bg-white"
-                      }`}
-                    />
-                  </button>
+                    {s.active ? "In use" : "Use this shader"}
+                  </Button>
+                  <Switch
+                    tone="mint"
+                    checked={s.enabled}
+                    onChange={(next) => togglePack(s, next)}
+                    label={`${s.enabled ? "Hide" : "Show"} ${s.cleanName} in the game's shader list`}
+                  />
                 </div>
               </div>
             ))
           )}
         </div>
-      </section>
+      </Card>
 
-      {/* Resource Packs Section */}
-      <section className="rounded-2xl border border-white/10 bg-pb-card p-6">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-pb-cyan/15 text-pb-cyan">
-              <Palette size={20} />
-            </div>
-            <div>
-              <h2 className="text-base font-bold">Resource Packs ({resourcePacks.length})</h2>
-              <p className="text-xs text-pb-muted">
-                Toggle bundled or custom resource packs in your instance's `resourcepacks/` folder.
-              </p>
-            </div>
-          </div>
-
-          <button
-            onClick={() => handleOpenFolder("resourcepack")}
-            disabled={!inTauri}
-            className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-white/10 bg-pb-bg px-3 py-1.5 text-xs font-semibold text-white hover:border-pb-cyan/50 hover:text-pb-cyan disabled:opacity-50"
-          >
-            <FolderOpen size={14} /> Open `resourcepacks`
-          </button>
-        </div>
-
+      <Card>
+        <CardHeader
+          icon={<Palette size={20} />}
+          title={`Resource packs (${resourcePacks.length})`}
+          description="Turn bundled or your own resource packs on or off."
+          actions={
+            <Button
+              size="sm"
+              icon={<FolderOpen size={14} />}
+              disabled={!inTauri}
+              onClick={() => openFolder("resourcepack")}
+            >
+              Open folder
+            </Button>
+          }
+        />
         <div className="mt-4 space-y-2.5">
           {resourcePacks.length === 0 ? (
-            <div className="rounded-xl border border-white/5 bg-pb-bg p-4 text-xs text-pb-muted">
-              No custom `.zip` resource packs in `resourcepacks/` yet. Click <strong>Open `resourcepacks`</strong> above to drop in your favorite texture packs!
-            </div>
+            <p className="rounded-xl border border-white/5 bg-pb-bg p-4 text-xs text-pb-muted">
+              No resource packs yet. Use <strong>Open folder</strong> and drop your{" "}
+              <code className="font-mono">.zip</code> packs in.
+            </p>
           ) : (
             resourcePacks.map((rp) => (
               <div
@@ -254,28 +180,20 @@ export default function Packs({
               >
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-sm font-bold text-white">{rp.cleanName}</div>
-                  <div className="mt-0.5 text-[11px] text-pb-muted">
-                    {rp.filename} • {formatBytes(rp.size)}
+                  <div className="mt-0.5 truncate text-2xs text-pb-muted">
+                    {rp.filename} · {formatBytes(rp.size)}
                   </div>
                 </div>
-
-                <button
-                  onClick={() => handleTogglePack(rp)}
-                  className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full transition ${
-                    rp.enabled ? "bg-pb-cyan" : "bg-white/15"
-                  }`}
-                >
-                  <span
-                    className={`inline-block h-4 w-4 transform rounded-full bg-[#031617] transition ${
-                      rp.enabled ? "translate-x-6" : "translate-x-1 bg-white"
-                    }`}
-                  />
-                </button>
+                <Switch
+                  checked={rp.enabled}
+                  onChange={(next) => togglePack(rp, next)}
+                  label={`${rp.enabled ? "Disable" : "Enable"} ${rp.cleanName}`}
+                />
               </div>
             ))
           )}
         </div>
-      </section>
+      </Card>
     </div>
   );
 }

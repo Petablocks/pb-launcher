@@ -109,7 +109,10 @@ pub async fn check_discord_link(uuid: &str) -> Result<DiscordLinkStatus, String>
     let url = format!("{PB_AUTH_BASE_URL}/api/public/launcher/status/{clean_uuid}");
     let mut req = http_client().get(&url);
     if let Some((profile, mc_token)) = crate::auth::get_active_mc_session() {
-        let req_hex: String = clean_uuid.chars().filter(|c| c.is_ascii_hexdigit()).collect();
+        let req_hex: String = clean_uuid
+            .chars()
+            .filter(|c| c.is_ascii_hexdigit())
+            .collect();
         let prof_hex: String = profile
             .uuid
             .chars()
@@ -153,7 +156,9 @@ pub async fn request_discord_link_code(
         if clean_req.eq_ignore_ascii_case(&clean_prof) && !mc_token.is_empty() {
             req = req.bearer_auth(mc_token);
         } else {
-            return Err("Please sign in with your Microsoft account before linking Discord.".into());
+            return Err(
+                "Please sign in with your Microsoft account before linking Discord.".into(),
+            );
         }
     } else {
         return Err("Please sign in with your Microsoft account before linking Discord.".into());
@@ -222,7 +227,7 @@ pub fn list_screenshots(instance_id: &str) -> Result<Vec<ScreenshotItem>, String
         }
     }
 
-    items.sort_by(|a, b| b.modified_epoch.cmp(&a.modified_epoch));
+    items.sort_by_key(|i| std::cmp::Reverse(i.modified_epoch));
     Ok(items)
 }
 
@@ -520,7 +525,9 @@ pub async fn submit_beta_feedback(
             settings.memory_mb,
             java.version.unwrap_or_else(|| "Not installed".into()),
             java.source,
-            state.installed_version.unwrap_or_else(|| "Not synced".into()),
+            state
+                .installed_version
+                .unwrap_or_else(|| "Not synced".into()),
             state.disabled_mods.len()
         );
         fields.push(json!({

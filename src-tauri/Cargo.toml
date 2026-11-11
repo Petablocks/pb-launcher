@@ -1,6 +1,6 @@
 [package]
 name = "pb-launcher"
-version = "1.14.1"
+version = "1.17.0"
 description = "Official PETABLOCKS Minecraft Launcher"
 edition = "2021"
 
@@ -27,5 +27,7 @@ tauri-plugin-single-instance = "2"
 sha2 = "0.10"
 sysinfo = { version = "0.33", default-features = false, features = ["system"] }
 windows-sys = { version = "0.61", features = ["Win32_Security_Cryptography", "Win32_Foundation", "Win32_System_JobObjects", "Win32_System_Threading"] }
+ed25519-dalek = "2"
+base64 = "0.22"
 
 

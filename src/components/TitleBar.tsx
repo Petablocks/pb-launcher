@@ -26,7 +26,7 @@ export default function TitleBar() {
         </span>
         <span
           data-tauri-drag-region
-          className="rounded-md border border-pb-purple/40 bg-pb-purple/15 px-1.5 py-0.5 text-[10px] font-extrabold tracking-widest text-pb-purple"
+          className="rounded-md border border-pb-purple/40 bg-pb-purple/15 px-1.5 py-0.5 text-2xs font-extrabold tracking-widest text-pb-purple"
         >
           BETA
         </span>

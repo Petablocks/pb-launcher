@@ -1,4 +1,3 @@
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap");
 @import "tailwindcss";
 
 @font-face {
@@ -37,8 +36,19 @@
   --color-pb-card: #111827;
   --color-pb-elevated: #1F2937;
   --color-pb-muted: #9CA3AF;
-  --font-sans: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  --font-mono: "JetBrains Mono", monospace;
+  /* Text on cyan / mint fills */
+  --color-pb-ink: #031617;
+  /* Raised dialog surface and the deepest chrome (footer, scrims) */
+  --color-pb-surface: #0C1322;
+  --color-pb-deep: #060A12;
+  /* Third-party brand fills */
+  --color-discord: #5865F2;
+  --color-bmc: #FFDD00;
+  /* Smallest text size used anywhere in the launcher (11px) */
+  --text-2xs: 0.6875rem;
+  --text-2xs--line-height: 1rem;
+  --font-sans: "Inter Variable", "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "JetBrains Mono Variable", "JetBrains Mono", monospace;
   --font-minecraft: "Minecraft Ten", monospace;
 }
 
@@ -64,6 +74,28 @@ h1, h2 {
   font-family: "Minecraft Ten", monospace;
   letter-spacing: 0.05em;
 }
+/* Tailwind v4 no longer sets these; every enabled button in the launcher is clickable. */
+button:not(:disabled), [role="button"] { cursor: pointer; }
+
+/* One visible keyboard focus style for every interactive element. */
+:focus-visible {
+  outline: 2px solid var(--pb-cyan);
+  outline-offset: 2px;
+}
+
+/* Text players may need to copy (errors, logs, codes) opts back in to selection. */
+.select-text, .select-text * { user-select: text; }
+
+@keyframes pb-modal-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+.pb-modal-in { animation: pb-modal-in 160ms ease-out; }
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-pulse, .pb-modal-in { animation: none; }
+}
+
 ::-webkit-scrollbar { width: 8px; }
 ::-webkit-scrollbar-thumb { background: var(--pb-elevated); border-radius: 4px; }
 
@@ -78,3 +110,28 @@ h1, h2 {
   -webkit-text-fill-color: transparent;
 }
 .pb-glow { box-shadow: 0 0 24px rgba(15, 205, 248, 0.35); }
+
+@keyframes pb-indeterminate {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(300%); }
+}
+.pb-indeterminate { animation: pb-indeterminate 1.4s ease-in-out infinite; }
+
+/* In the components layer so spacing utilities (e.g. pl-9) can still override it. */
+@layer components {
+  /* Standard text field. */
+  .pb-input {
+    width: 100%;
+    border-radius: 0.75rem;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: var(--pb-bg);
+    padding: 0.5rem 0.875rem;
+    font-size: 0.75rem;
+    line-height: 1rem;
+    color: #fff;
+    user-select: text;
+  }
+  .pb-input::placeholder { color: rgba(156, 163, 175, 0.6); }
+  .pb-input:focus { border-color: var(--pb-cyan); outline: none; }
+  .pb-input:disabled { opacity: 0.6; }
+}
