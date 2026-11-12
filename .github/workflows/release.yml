@@ -94,13 +94,14 @@ jobs:
       # Detached Ed25519 signature over the installer's SHA-256, verified by launchers built
       # with PB_UPDATE_PUBLIC_KEY. Enabled by the PB_UPDATE_SIGNING_KEY secret (PEM private key).
       - name: Sign installer for the in-app updater
-        if: env.HAS_UPDATE_SIGNING_KEY == 'true' && startsWith(github.ref, 'refs/tags/')
+        if: env.HAS_UPDATE_SIGNING_KEY == 'true'
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PB_UPDATE_SIGNING_KEY: ${{ secrets.PB_UPDATE_SIGNING_KEY }}
         run: |
           set -euo pipefail
+          TAG="v$(node -p "require('./package.json').version")"
           installer=$(ls src-tauri/target/release/bundle/nsis/*-setup.exe | head -n 1)
           key="$RUNNER_TEMP/update-signing-key.pem"
           printf '%s\n' "$PB_UPDATE_SIGNING_KEY" > "$key"
@@ -108,19 +109,19 @@ jobs:
           openssl pkeyutl -sign -inkey "$key" -rawin -in "$RUNNER_TEMP/digest.txt" -out "$RUNNER_TEMP/sig.bin"
           rm -f "$key"
           openssl base64 -A -in "$RUNNER_TEMP/sig.bin" -out "$installer.sig"
-          gh release upload "$GITHUB_REF_NAME" "$installer.sig" --clobber
+          gh release upload "$TAG" "$installer.sig" --clobber
 
       # Launcher releases also host the modpack manifests and .mrpack archives so that
       # releases/latest/download/... keeps working. Always copy the newest published modpack
       # release of each pack instead of a pinned version.
       - name: Carry forward the latest modpack manifests and mrpacks
-        if: startsWith(github.ref, 'refs/tags/')
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -uo pipefail
-          TAG="${GITHUB_REF_NAME}"
+          # Derived from package.json so it also works for manually dispatched runs.
+          TAG="v$(node -p "require('./package.json').version")"
           mkdir -p carry && cd carry
           for prefix in s2-v create2-v; do
             latest=$(gh release list --repo Petablocks/pb-modpacks --limit 100 \
