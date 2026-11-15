@@ -3,6 +3,12 @@
 All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.18.0] - 2026-11-15
+### Added
+- **Season 2 Flat World Server Selector**:
+  - Added `alternateServers` support to `launcher-config.json`, `src/instances.ts`, and `src-tauri/src/config.rs`.
+  - Added a **Main / Flat World** (`s2-flat.petablocks.com:11678`) server selector on the Season 2 Play hero card so players can switch servers and auto-join directly without duplicating modpack files.
+
 ## [1.17.2] - 2026-11-15
 ### Changed
 - **UI/UX Polish Pass**:

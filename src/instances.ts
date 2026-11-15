@@ -4,10 +4,17 @@ import { inTauri } from "./auth";
 
 export type AccessPolicy = "public" | "discord_linked" | "beta_role" | "patreon_role";
 
+export interface AlternateServer {
+  id: string;
+  label: string;
+  serverAddress: string;
+}
+
 export interface Instance {
   id: string;
   name: string;
   serverAddress: string;
+  alternateServers?: AlternateServer[];
   minecraftVersion: string;
   neoforgeVersion?: string;
   loader: string;

@@ -27,10 +27,20 @@ const MAX_ANNOUNCEMENTS: usize = 20;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct AlternateServerConfig {
+    pub id: String,
+    pub label: String,
+    pub server_address: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct InstanceConfig {
     pub id: String,
     pub name: String,
     pub server_address: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub alternate_servers: Option<Vec<AlternateServerConfig>>,
     pub minecraft_version: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub neoforge_version: Option<String>,

@@ -5,6 +5,9 @@
       "id": "petablocks-s2",
       "name": "PETABLOCKS Season 2",
       "serverAddress": "s2.petablocks.com",
+      "alternateServers": [
+        { "id": "flat", "label": "Flat World", "serverAddress": "s2-flat.petablocks.com:11678" }
+      ],
       "minecraftVersion": "1.21.1",
       "neoforgeVersion": "21.1.259",
       "loader": "NeoForge",

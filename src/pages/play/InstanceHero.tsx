@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { CheckCircle2, Clock, FileText, Sparkles, Terminal } from "lucide-react";
 import { MinecraftServerIcon } from "../../components/MinecraftServerIcon";
 import { Badge, Button, cn } from "../../components/ui";
@@ -19,8 +20,18 @@ export default function InstanceHero({
   onShowChangelog: () => void;
 }) {
   const { runtimeOf, serverStatus } = useLauncher();
+  const [selectedServerId, setSelectedServerId] = useState<string>("main");
+  useEffect(() => {
+    setSelectedServerId("main");
+  }, [inst.id]);
+
+  const activeAltServer = inst.alternateServers?.find((s) => s.id === selectedServerId);
+  const effectiveInst: Instance = activeAltServer
+    ? { ...inst, serverAddress: activeAltServer.serverAddress }
+    : inst;
+
   const rt = runtimeOf(inst.id);
-  const action = usePlayAction(inst);
+  const action = usePlayAction(effectiveInst);
   const { hasUpdate, latestVersion, installedVersion } = getVersionInfo(rt);
   const playable = inst.status === "playable";
   const loaderVersion =
@@ -54,7 +65,48 @@ export default function InstanceHero({
             </Badge>
           )}
         </div>
-        <ServerBadge inst={inst} status={serverStatus[inst.id]} />
+        <div className="flex flex-wrap items-center gap-2">
+          <ServerBadge inst={effectiveInst} status={serverStatus[inst.id]} />
+          {inst.alternateServers && inst.alternateServers.length > 0 && (
+            <div
+              role="radiogroup"
+              aria-label="Select server"
+              className="inline-flex items-center rounded-lg border border-white/15 bg-black/55 p-0.5 text-2xs font-bold backdrop-blur-sm"
+            >
+              <button
+                type="button"
+                role="radio"
+                aria-checked={selectedServerId === "main"}
+                onClick={() => setSelectedServerId("main")}
+                className={cn(
+                  "cursor-pointer rounded-md px-2 py-1 transition",
+                  selectedServerId === "main"
+                    ? "bg-pb-cyan text-pb-bg"
+                    : "text-pb-muted hover:text-white",
+                )}
+              >
+                Main
+              </button>
+              {inst.alternateServers.map((srv) => (
+                <button
+                  key={srv.id}
+                  type="button"
+                  role="radio"
+                  aria-checked={selectedServerId === srv.id}
+                  onClick={() => setSelectedServerId(srv.id)}
+                  className={cn(
+                    "cursor-pointer rounded-md px-2 py-1 transition",
+                    selectedServerId === srv.id
+                      ? "bg-pb-cyan text-pb-bg"
+                      : "text-pb-muted hover:text-white",
+                  )}
+                >
+                  {srv.label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="relative flex min-h-0 flex-1 items-center justify-center px-6 py-2">
