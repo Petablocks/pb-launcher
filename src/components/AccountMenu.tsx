@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useState } from "react";
 import {
   CheckCircle2,
   ChevronRight,
@@ -9,7 +9,7 @@ import {
   ShieldAlert,
   UserRound,
 } from "lucide-react";
-import { DeviceCodeInfo, avatarUrl, completeLogin, logout, startLogin } from "../auth";
+import { avatarUrl, logout } from "../auth";
 import { requestDiscordLinkCode } from "../community";
 import { formatPlaytime, pluralize } from "../lib/format";
 import { openExternal } from "../lib/open";
@@ -24,6 +24,12 @@ export default function AccountMenu() {
   const {
     session,
     setSession,
+    signingIn,
+    device,
+    signInError,
+    clearSignInError,
+    signIn,
+    cancelSignIn,
     restoringSession,
     discordStatus,
     refreshDiscord,
@@ -33,44 +39,14 @@ export default function AccountMenu() {
     setAccountOpen,
   } = useLauncher();
 
-  const [device, setDevice] = useState<DeviceCodeInfo | null>(null);
-  const [signingIn, setSigningIn] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [linkCode, setLinkCode] = useState<string | null>(null);
   const [requestingLink, setRequestingLink] = useState(false);
   const [copied, setCopied] = useState(false);
-  // Each sign-in attempt gets an id so a cancelled attempt cannot complete later.
-  const attempt = useRef(0);
 
   const discordReady = Boolean(discordStatus?.linked && discordStatus.inGuild);
   const pendingCode = linkCode ?? discordStatus?.pendingCode ?? null;
-
-  async function signIn() {
-    const id = ++attempt.current;
-    setError(null);
-    setSigningIn(true);
-    try {
-      const info = await startLogin();
-      if (id !== attempt.current) return;
-      setDevice(info);
-      openExternal(info.verification_uri);
-      const next = await completeLogin(info);
-      if (id === attempt.current) setSession(next);
-    } catch (e) {
-      if (id === attempt.current) setError(String(e));
-    } finally {
-      if (id === attempt.current) {
-        setSigningIn(false);
-        setDevice(null);
-      }
-    }
-  }
-
-  function cancelSignIn() {
-    attempt.current++;
-    setSigningIn(false);
-    setDevice(null);
-  }
+  const activeError = error ?? signInError;
 
   async function signOut() {
     try {
@@ -279,9 +255,15 @@ export default function AccountMenu() {
               )}
             </div>
 
-            {error && (
-              <Alert tone="error" onDismiss={() => setError(null)}>
-                {error}
+            {activeError && (
+              <Alert
+                tone="error"
+                onDismiss={() => {
+                  setError(null);
+                  clearSignInError();
+                }}
+              >
+                {activeError}
               </Alert>
             )}
 
@@ -345,9 +327,15 @@ export default function AccountMenu() {
               </Button>
             )}
 
-            {error && (
-              <Alert tone="error" onDismiss={() => setError(null)}>
-                {error}
+            {activeError && (
+              <Alert
+                tone="error"
+                onDismiss={() => {
+                  setError(null);
+                  clearSignInError();
+                }}
+              >
+                {activeError}
               </Alert>
             )}
           </div>

@@ -3,6 +3,11 @@
 All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.18.1] - 2026-11-15
+### Fixed
+- **Microsoft Sign-In Persistence (Issue #4)**:
+  - Moved the Microsoft device-code sign-in state (`signIn`, `cancelSignIn`, `device`, `signingIn`, `signInError`) from `AccountMenu` into global `LauncherProvider` state so closing the Account menu or navigating away while authenticating in the browser no longer drops the completed login session.
+
 ## [1.18.0] - 2026-11-15
 ### Added
 - **Season 2 Flat World Server Selector**:

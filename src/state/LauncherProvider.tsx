@@ -9,7 +9,8 @@ import {
   useRef,
   useState,
 } from "react";
-import { Session, inTauri, restoreSession } from "../auth";
+import { DeviceCodeInfo, Session, completeLogin, inTauri, restoreSession, startLogin } from "../auth";
+import { openExternal } from "../lib/open";
 import {
   CrashReportInfo,
   DiscordLinkStatus,
@@ -133,6 +134,12 @@ interface LauncherContextValue {
 
   session: Session | null;
   setSession: (s: Session | null) => void;
+  signingIn: boolean;
+  device: DeviceCodeInfo | null;
+  signInError: string | null;
+  clearSignInError: () => void;
+  signIn: () => Promise<void>;
+  cancelSignIn: () => void;
   /** True until the cached session restore attempt has finished. */
   restoringSession: boolean;
   discordStatus: DiscordLinkStatus | null;
@@ -238,6 +245,39 @@ export function LauncherProvider({ children }: { children: ReactNode }) {
 
   // ---------------------------------------------------------------- account
   const [session, setSession] = useState<Session | null>(null);
+  const [signingIn, setSigningIn] = useState(false);
+  const [device, setDevice] = useState<DeviceCodeInfo | null>(null);
+  const [signInError, setSignInError] = useState<string | null>(null);
+  const signInAttempt = useRef(0);
+
+  const signIn = useCallback(async () => {
+    const id = ++signInAttempt.current;
+    setSignInError(null);
+    setSigningIn(true);
+    try {
+      const info = await startLogin();
+      if (id !== signInAttempt.current) return;
+      setDevice(info);
+      openExternal(info.verification_uri);
+      const next = await completeLogin(info);
+      if (id === signInAttempt.current) setSession(next);
+    } catch (e) {
+      if (id === signInAttempt.current) setSignInError(String(e));
+    } finally {
+      if (id === signInAttempt.current) {
+        setSigningIn(false);
+        setDevice(null);
+      }
+    }
+  }, []);
+
+  const cancelSignIn = useCallback(() => {
+    signInAttempt.current++;
+    setSigningIn(false);
+    setDevice(null);
+  }, []);
+
+  const clearSignInError = useCallback(() => setSignInError(null), []);
   const [restoringSession, setRestoringSession] = useState(true);
   const [discordStatus, setDiscordStatus] = useState<DiscordLinkStatus | null>(null);
   const sessionRef = useRef(session);
@@ -604,6 +644,12 @@ export function LauncherProvider({ children }: { children: ReactNode }) {
     selectInstance,
     session,
     setSession,
+    signingIn,
+    device,
+    signInError,
+    clearSignInError,
+    signIn,
+    cancelSignIn,
     restoringSession,
     discordStatus,
     refreshDiscord,
