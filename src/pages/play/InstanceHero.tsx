@@ -66,7 +66,10 @@ export default function InstanceHero({
           )}
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <ServerBadge inst={effectiveInst} status={serverStatus[inst.id]} />
+          <ServerBadge
+            inst={effectiveInst}
+            status={serverStatus[effectiveInst.serverAddress] ?? serverStatus[inst.id]}
+          />
           {inst.alternateServers && inst.alternateServers.length > 0 && (
             <div
               role="radiogroup"

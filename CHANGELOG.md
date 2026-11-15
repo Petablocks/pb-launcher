@@ -3,6 +3,12 @@
 All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.18.2] - 2026-11-15
+### Fixed
+- **Alternate Server Live Ping & Player Count**:
+  - Updated `LauncherProvider` to also ping all `alternateServers` (such as Season 2's **Flat World** `s2-flat.petablocks.com:11678`) and key `serverStatus` by `serverAddress`.
+  - Updated `InstanceHero` to look up `serverStatus[effectiveInst.serverAddress]` so any selected server displays its live online status, player count, and latency badge.
+
 ## [1.18.1] - 2026-11-15
 ### Fixed
 - **Microsoft Sign-In Persistence (Issue #4)**:

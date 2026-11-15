@@ -359,10 +359,25 @@ export function LauncherProvider({ children }: { children: ReactNode }) {
     if (!inTauri) return;
     const pingAll = () => {
       instances.forEach((inst) => {
-        if (!inst.serverAddress) return;
-        pingServer(inst.serverAddress)
-          .then((status) => setServerStatus((prev) => ({ ...prev, [inst.id]: status })))
-          .catch(() => {});
+        if (inst.serverAddress) {
+          pingServer(inst.serverAddress)
+            .then((status) =>
+              setServerStatus((prev) => ({
+                ...prev,
+                [inst.id]: status,
+                [inst.serverAddress]: status,
+              })),
+            )
+            .catch(() => {});
+        }
+        inst.alternateServers?.forEach((alt) => {
+          if (!alt.serverAddress) return;
+          pingServer(alt.serverAddress)
+            .then((status) =>
+              setServerStatus((prev) => ({ ...prev, [alt.serverAddress]: status })),
+            )
+            .catch(() => {});
+        });
       });
     };
     pingAll();
