@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Boxes, FolderOpen, RefreshCw, Search, ShieldCheck } from "lucide-react";
+import { Boxes, FolderOpen, RefreshCw, Search, ShieldCheck, X } from "lucide-react";
 import { inTauri } from "../auth";
 import { ModrinthLogo } from "../components/BrandIcons";
 import InstanceSelector from "../components/InstanceSelector";
@@ -120,13 +120,23 @@ export default function Mods() {
           <div className="relative max-w-xs flex-1">
             <Search size={15} className="absolute top-1/2 left-3 -translate-y-1/2 text-pb-muted" />
             <input
-              type="search"
+              type="text"
               aria-label="Search mods"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search mods or categories"
-              className="pb-input pl-9"
+              className="pb-input pl-9 pr-8"
             />
+            {search && (
+              <button
+                type="button"
+                aria-label="Clear search"
+                onClick={() => setSearch("")}
+                className="absolute top-1/2 right-2.5 -translate-y-1/2 rounded p-0.5 text-pb-muted hover:text-white"
+              >
+                <X size={14} />
+              </button>
+            )}
           </div>
         )}
       </div>
@@ -170,6 +180,13 @@ export default function Mods() {
             : manifest
               ? "This pack has no optional mods."
               : "The modpack list could not be loaded. Check your connection and refresh."}
+          {query && (
+            <div className="mt-3">
+              <Button size="sm" variant="ghost" onClick={() => setSearch("")}>
+                Clear search
+              </Button>
+            </div>
+          )}
         </EmptyState>
       ) : (
         <ul className="space-y-2.5">

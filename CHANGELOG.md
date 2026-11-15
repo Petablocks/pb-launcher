@@ -3,6 +3,13 @@
 All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.17.2] - 2026-11-15
+### Changed
+- **UI/UX Polish Pass**:
+  - **Mods**: Added a clear-search (`×`) button inside the search input and a "Clear search" action in the empty-search state.
+  - **Screenshots**: Added `←` / `→` keyboard arrow navigation, Previous/Next viewer buttons, and a **Copy path** button with `Copied` feedback.
+  - **Game Log Drawer**: Added `Copied` confirmation feedback on the **Copy** button.
+
 ## [1.17.1] - 2026-11-15
 ### Fixed
 - **Modpack Hero Changelog**:

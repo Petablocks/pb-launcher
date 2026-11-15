@@ -1,5 +1,5 @@
-import { useEffect, useRef } from "react";
-import { Copy, FolderOpen, X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Check, Copy, FolderOpen, X } from "lucide-react";
 import { Button, IconButton } from "../../components/ui";
 import { Instance } from "../../instances";
 import { getInstanceDir } from "../../launch";
@@ -10,6 +10,7 @@ export default function LogDrawer({ inst, onClose }: { inst: Instance; onClose: 
   const logs = useGameLogs(inst.id);
   const scroller = useRef<HTMLDivElement>(null);
   const pinned = useRef(true);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     const el = scroller.current;
@@ -17,7 +18,13 @@ export default function LogDrawer({ inst, onClose }: { inst: Instance; onClose: 
   }, [logs]);
 
   function copyAll() {
-    navigator.clipboard.writeText(logs.map((l) => l.line).join("\n")).catch(() => {});
+    navigator.clipboard
+      .writeText(logs.map((l) => l.line).join("\n"))
+      .then(() => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1500);
+      })
+      .catch(() => {});
   }
 
   return (
@@ -27,8 +34,14 @@ export default function LogDrawer({ inst, onClose }: { inst: Instance; onClose: 
           Game log <span className="font-normal text-pb-muted">· {logs.length} lines</span>
         </span>
         <div className="flex items-center gap-1">
-          <Button size="sm" variant="ghost" icon={<Copy size={12} />} onClick={copyAll} disabled={logs.length === 0}>
-            Copy
+          <Button
+            size="sm"
+            variant="ghost"
+            icon={copied ? <Check size={12} className="text-pb-mint" /> : <Copy size={12} />}
+            onClick={copyAll}
+            disabled={logs.length === 0}
+          >
+            {copied ? "Copied" : "Copy"}
           </Button>
           <Button
             size="sm"

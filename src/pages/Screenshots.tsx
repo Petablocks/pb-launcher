@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ExternalLink, FolderOpen, Image as ImageIcon, RefreshCw } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, Copy, ExternalLink, FolderOpen, Image as ImageIcon, RefreshCw } from "lucide-react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { inTauri } from "../auth";
 import {
@@ -17,6 +17,7 @@ export default function Screenshots() {
   const instance = useManagedInstance();
   const [items, setItems] = useState<ScreenshotItem[]>([]);
   const [selectedName, setSelectedName] = useState<string | null>(null);
+  const [copiedPath, setCopiedPath] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -41,7 +42,27 @@ export default function Screenshots() {
   }, [instance.id]);
 
   // Falls back to the newest capture, including after switching instance.
-  const selected = items.find((i) => i.filename === selectedName) ?? items[0] ?? null;
+  const selectedIndex = items.findIndex((i) => i.filename === selectedName);
+  const activeIndex = selectedIndex >= 0 ? selectedIndex : 0;
+  const selected = items[activeIndex] ?? null;
+
+  useEffect(() => {
+    if (items.length <= 1) return;
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        const prev = (activeIndex - 1 + items.length) % items.length;
+        setSelectedName(items[prev].filename);
+      } else if (e.key === "ArrowRight") {
+        e.preventDefault();
+        const next = (activeIndex + 1) % items.length;
+        setSelectedName(items[next].filename);
+      }
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [activeIndex, items]);
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
@@ -101,17 +122,57 @@ export default function Screenshots() {
                 <span className="font-mono font-bold text-white">{selected.filename}</span>
                 <span className="ml-3 text-pb-muted">{formatBytes(selected.size)}</span>
               </span>
-              <Button
-                size="sm"
-                variant="ghost"
-                className="text-pb-cyan"
-                icon={<ExternalLink size={12} />}
-                onClick={() =>
-                  openScreenshotFile(instance.id, selected.filename).catch((e) => setError(String(e)))
-                }
-              >
-                Open image
-              </Button>
+              <div className="flex shrink-0 items-center gap-1">
+                {items.length > 1 && (
+                  <>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      aria-label="Previous screenshot"
+                      icon={<ChevronLeft size={14} />}
+                      onClick={() =>
+                        setSelectedName(items[(activeIndex - 1 + items.length) % items.length].filename)
+                      }
+                    />
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      aria-label="Next screenshot"
+                      icon={<ChevronRight size={14} />}
+                      onClick={() =>
+                        setSelectedName(items[(activeIndex + 1) % items.length].filename)
+                      }
+                    />
+                  </>
+                )}
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  icon={copiedPath ? <Check size={12} className="text-pb-mint" /> : <Copy size={12} />}
+                  onClick={() => {
+                    navigator.clipboard
+                      .writeText(selected.path)
+                      .then(() => {
+                        setCopiedPath(true);
+                        setTimeout(() => setCopiedPath(false), 1500);
+                      })
+                      .catch(() => {});
+                  }}
+                >
+                  {copiedPath ? "Copied" : "Copy path"}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="text-pb-cyan"
+                  icon={<ExternalLink size={12} />}
+                  onClick={() =>
+                    openScreenshotFile(instance.id, selected.filename).catch((e) => setError(String(e)))
+                  }
+                >
+                  Open image
+                </Button>
+              </div>
             </figcaption>
           </figure>
 
