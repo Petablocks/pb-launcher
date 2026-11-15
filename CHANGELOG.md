@@ -3,6 +3,11 @@
 All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.17.1] - 2026-11-15
+### Fixed
+- **Modpack Hero Changelog**:
+  - Updated Season 2's `changelogUrl` in `launcher-config.json` and `fetch_changelog` fallback in `src-tauri/src/sync/manifest.rs` to point directly to `pb-modpacks/releases/download/s2-v0.22.0/CHANGELOG.md` instead of `/releases/latest/` (which resolved to Create 2 `1.4.1`).
+
 ## [1.17.0] - 2026-11-11
 ### Added
 - **Remote launcher config** (`launcher-config.json`): the instance list (servers, versions, manifest and changelog links, access policy, artwork), the footer headline and the News announcements are fetched from this repository, cached, and fall back to the copy bundled with the launcher. Adding a server, changing a link or posting news no longer needs a launcher release.

@@ -177,11 +177,7 @@ pub async fn fetch_changelog(instance_id: &str, changelog_url: &str) -> Result<S
     }
     if instance_id == "petablocks-s2" {
         candidate_urls.push(
-            "https://github.com/Petablocks/pb-modpacks/releases/latest/download/CHANGELOG.md"
-                .to_string(),
-        );
-        candidate_urls.push(
-            "https://github.com/Petablocks/pb-launcher/releases/latest/download/CHANGELOG.md"
+            "https://github.com/Petablocks/pb-modpacks/releases/download/s2-v0.22.0/CHANGELOG.md"
                 .to_string(),
         );
     } else if instance_id == "petablocks-create2" {
