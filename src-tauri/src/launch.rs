@@ -56,6 +56,81 @@ fn rpc_details(instance_name: Option<&str>) -> String {
     }
 }
 
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RpcGameState {
+    #[serde(default)]
+    screen: String,
+    #[serde(default)]
+    mode: String,
+    #[serde(default)]
+    dimension: String,
+    #[serde(default)]
+    updated_at: u64,
+}
+
+fn read_rpc_state(game_dir: &Path, now_epoch: u64) -> Option<RpcGameState> {
+    let raw = fs::read_to_string(game_dir.join("rpc-state.json")).ok()?;
+    let st: RpcGameState = serde_json::from_str(&raw).ok()?;
+    if st.updated_at > 0 && now_epoch.saturating_sub(st.updated_at) > 30 {
+        return None;
+    }
+    Some(st)
+}
+
+fn format_rpc_headline(base_headline: &str, server_addr: &str) -> String {
+    let clean = base_headline.trim_start_matches("Playing ").trim();
+    let short = clean.strip_prefix("PETABLOCKS ").unwrap_or(clean);
+    if server_addr.eq_ignore_ascii_case("s2-flat.petablocks.com") {
+        format!("Playing {short} (Flat World)")
+    } else if server_addr.eq_ignore_ascii_case("s2.petablocks.com") {
+        format!("Playing {short} (Main)")
+    } else {
+        base_headline.to_string()
+    }
+}
+
+fn format_rpc_presence(
+    base_headline: &str,
+    server_addr: &str,
+    game_state: Option<&RpcGameState>,
+    ping: Option<&crate::ping::ServerStatus>,
+    detailed: bool,
+) -> (String, String) {
+    let details = if detailed {
+        format_rpc_headline(base_headline, server_addr)
+    } else {
+        base_headline.to_string()
+    };
+    if !detailed {
+        return (details, "In-game".to_string());
+    }
+    let player_part = ping
+        .filter(|p| p.online)
+        .map(|p| format!("Online ({} of {})", p.online_players, p.max_players));
+
+    if let Some(st) = game_state {
+        if st.screen == "menu" {
+            return (details, "In Main Menu".to_string());
+        }
+        let dim = if st.dimension.is_empty() {
+            "In-game"
+        } else {
+            st.dimension.as_str()
+        };
+        if st.mode == "singleplayer" {
+            return (details, format!("Singleplayer · {dim}"));
+        }
+        if let Some(online) = player_part {
+            return (details, format!("{dim} · {online}"));
+        }
+        return (details, format!("{dim} · {server_addr}"));
+    }
+
+    let state_text = player_part.unwrap_or_else(|| format!("Connected to {server_addr}"));
+    (details, state_text)
+}
+
 /// Running game processes keyed by instance ID. Notifying the handle asks the exit watcher
 /// to terminate that process.
 static RUNNING_GAMES: LazyLock<Mutex<HashMap<String, Arc<Notify>>>> =
@@ -724,11 +799,13 @@ pub async fn launch_game(app: AppHandle, mut req: LaunchRequest) -> Result<(), S
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_secs())
         .unwrap_or(0);
+    let detailed_rpc = settings.detailed_discord_rpc;
 
-    // Non-blocking Discord RPC update via background IPC worker
+    let (init_details, init_state) =
+        format_rpc_presence(&rpc_headline, &server_addr, None, None, detailed_rpc);
     crate::community::update_discord_rpc_with_pid(
-        &rpc_headline,
-        &format!("Connected to {server_addr}"),
+        &init_details,
+        &init_state,
         game_pid,
         Some(rpc_start),
     );
@@ -738,6 +815,8 @@ pub async fn launch_game(app: AppHandle, mut req: LaunchRequest) -> Result<(), S
     let last_saved_for_tick = last_saved_instant.clone();
     let inst_for_tick = req.instance_id.clone();
     let app_for_tick = app.clone();
+    let game_dir_for_tick = game_dir.clone();
+    let server_addr_for_tick = server_addr.clone();
     tokio::spawn(async move {
         let mut interval = tokio::time::interval(std::time::Duration::from_secs(15));
         interval.tick().await;
@@ -764,9 +843,37 @@ pub async fn launch_game(app: AppHandle, mut req: LaunchRequest) -> Result<(), S
                         }
                     }
 
-                    crate::community::update_discord_rpc_with_pid(
+                    let detailed = tokio::task::spawn_blocking(|| {
+                        crate::settings::load_settings().detailed_discord_rpc
+                    })
+                    .await
+                    .unwrap_or(true);
+                    let now_epoch = SystemTime::now()
+                        .duration_since(UNIX_EPOCH)
+                        .map(|d| d.as_secs())
+                        .unwrap_or(0);
+                    let dir_clone = game_dir_for_tick.clone();
+                    let game_state = tokio::task::spawn_blocking(move || {
+                        read_rpc_state(&dir_clone, now_epoch)
+                    })
+                    .await
+                    .ok()
+                    .flatten();
+                    let ping = if detailed {
+                        Some(crate::ping::ping_server(&server_addr_for_tick).await)
+                    } else {
+                        None
+                    };
+                    let (details, state_text) = format_rpc_presence(
                         &rpc_headline_tick,
-                        &format!("Connected to {server_addr}"),
+                        &server_addr_for_tick,
+                        game_state.as_ref(),
+                        ping.as_ref(),
+                        detailed,
+                    );
+                    crate::community::update_discord_rpc_with_pid(
+                        &details,
+                        &state_text,
                         game_pid,
                         Some(rpc_start),
                     );
@@ -971,6 +1078,51 @@ mod tests {
         );
         assert_eq!(rpc_details(None), "Playing PETABLOCKS");
         assert_eq!(rpc_details(Some("  ")), "Playing PETABLOCKS");
+    }
+
+    #[test]
+    fn rpc_presence_formatting() {
+        let st = RpcGameState {
+            screen: "in_game".into(),
+            mode: "multiplayer".into(),
+            dimension: "Overworld".into(),
+            updated_at: 100,
+        };
+        let ping = crate::ping::ServerStatus {
+            online: true,
+            online_players: 12,
+            max_players: 20,
+            motd: Some(String::new()),
+            latency_ms: Some(25),
+            player_sample: vec![],
+            version_name: None,
+        };
+        assert_eq!(
+            format_rpc_presence(
+                "Playing PETABLOCKS Season 2",
+                "s2.petablocks.com",
+                Some(&st),
+                Some(&ping),
+                true,
+            ),
+            (
+                "Playing Season 2 (Main)".to_string(),
+                "Overworld · Online (12 of 20)".to_string(),
+            )
+        );
+        assert_eq!(
+            format_rpc_presence(
+                "Playing PETABLOCKS Season 2",
+                "s2-flat.petablocks.com",
+                None,
+                None,
+                false,
+            ),
+            (
+                "Playing PETABLOCKS Season 2".to_string(),
+                "In-game".to_string(),
+            )
+        );
     }
 
     #[test]

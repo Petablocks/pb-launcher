@@ -19,6 +19,8 @@ pub struct LauncherSettings {
     pub crash_webhook_url: Option<String>,
     #[serde(default = "default_update_channel")]
     pub update_channel: String, // "stable" or "staging"
+    #[serde(default = "default_true")]
+    pub detailed_discord_rpc: bool,
 }
 
 fn default_tuning_preset() -> String {
@@ -44,6 +46,7 @@ impl Default for LauncherSettings {
             direct_connect: true,
             crash_webhook_url: None,
             update_channel: "stable".into(),
+            detailed_discord_rpc: true,
         }
     }
 }

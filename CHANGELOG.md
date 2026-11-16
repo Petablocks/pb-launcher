@@ -3,6 +3,12 @@
 All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.19.0] - 2026-11-16
+### Added
+- **Live Discord Rich Presence**:
+  - Updated Discord Rich Presence in `src-tauri/src/launch.rs` and `src-tauri/src/community.rs` to show the active server (`Main` / `Flat World`), live dimension and mode from `rpc-state.json` (written by `petablocks-telemetry-mod`), live player count (`Online (X of Y)`), elapsed session timer, and **Join Discord** / **Website** buttons.
+  - Added a **Detailed Discord Rich Presence** privacy toggle in Settings (`src/pages/Settings.tsx` and `src-tauri/src/settings.rs`).
+
 ## [1.18.3] - 2026-11-16
 ### Fixed
 - **Automatic Latest Modpack Resolution**:

@@ -9,6 +9,7 @@ export interface LauncherSettings {
   tuningPreset?: "eco" | "standard" | "enthusiast" | "custom";
   closeOnLaunch: boolean;
   directConnect: boolean;
+  detailedDiscordRpc: boolean;
   crashWebhookUrl?: string | null;
   updateChannel?: "stable" | "staging";
 }
@@ -42,6 +43,7 @@ const DEFAULT_SETTINGS: LauncherSettings = {
     "-XX:+UseG1GC -XX:+ParallelRefProcEnabled -XX:MaxGCPauseMillis=200 -XX:+UnlockExperimentalVMOptions -XX:+DisableExplicitGC -XX:+AlwaysPreTouch",
   closeOnLaunch: true,
   directConnect: true,
+  detailedDiscordRpc: true,
   crashWebhookUrl: null,
   updateChannel: "stable",
 };

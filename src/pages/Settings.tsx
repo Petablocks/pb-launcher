@@ -318,6 +318,16 @@ export default function Settings() {
             />
           </SettingRow>
           <SettingRow
+            title="Detailed Discord Rich Presence"
+            description="Show your current server, dimension, and online player count on your Discord profile while playing."
+          >
+            <Switch
+              checked={draft.detailedDiscordRpc ?? true}
+              onChange={(next) => change({ detailedDiscordRpc: next })}
+              label="Detailed Discord Rich Presence"
+            />
+          </SettingRow>
+          <SettingRow
             title="Hide the launcher while playing"
             description="Minimises the launcher when Minecraft starts and brings it back when you quit."
           >

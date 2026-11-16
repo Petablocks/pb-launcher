@@ -633,7 +633,11 @@ fn send_activity_frame(pipe: &mut std::fs::File, msg: &DiscordRpcMsg) -> std::io
                     "small_image": "minecraft",
                     "small_text": "Minecraft 1.21.1 (NeoForge)"
                 },
-                "timestamps": { "start": start_time }
+                "timestamps": { "start": start_time },
+                "buttons": [
+                    { "label": "Join Discord", "url": "https://discord.gg/petablocks" },
+                    { "label": "Website", "url": "https://petablocks.com" }
+                ]
             }
         },
         "nonce": format!("pb-{}", start_time)
