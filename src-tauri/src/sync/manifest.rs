@@ -62,7 +62,42 @@ pub(crate) fn cached_manifest_path(instance_id: &str) -> PathBuf {
     instance_dir(instance_id).join("launcher-manifest.json")
 }
 
-pub(crate) async fn fetch_staging_manifest_url(client: &reqwest::Client) -> Option<String> {
+pub(crate) async fn fetch_latest_modpack_asset_url(
+    client: &reqwest::Client,
+    tag_prefix: &str,
+    asset_name: &str,
+) -> Option<String> {
+    let res = client
+        .get("https://api.github.com/repos/Petablocks/pb-modpacks/releases?per_page=15")
+        .header("Accept", "application/vnd.github+json")
+        .send()
+        .await
+        .ok()?;
+    if !res.status().is_success() {
+        return None;
+    }
+    let releases: Vec<serde_json::Value> = res.json().await.ok()?;
+    let newest = releases.into_iter().find(|r| {
+        !r["draft"].as_bool().unwrap_or(false)
+            && !r["prerelease"].as_bool().unwrap_or(false)
+            && r["tag_name"]
+                .as_str()
+                .is_some_and(|t| t.starts_with(tag_prefix))
+    })?;
+    let assets = newest["assets"].as_array()?;
+    for asset in assets {
+        if asset["name"].as_str() == Some(asset_name) {
+            if let Some(url) = asset["browser_download_url"].as_str() {
+                if is_allowed_download_url(url) {
+                    return Some(url.to_string());
+                }
+            }
+        }
+    }
+    None
+}
+
+async fn fetch_staging_manifest_url(client: &reqwest::Client) -> Option<String> {
     let res = client
         .get("https://api.github.com/repos/Petablocks/petablocks-modpack-s2/releases?per_page=5")
         .header("Accept", "application/vnd.github+json")
@@ -104,6 +139,23 @@ pub async fn fetch_manifest(
             if is_allowed_download_url(&staging_url) {
                 candidate_urls.push(staging_url);
             }
+        }
+    }
+    if instance_id == "petablocks-s2" {
+        if let Some(latest_url) =
+            fetch_latest_modpack_asset_url(client, "s2-v", "launcher-manifest.json").await
+        {
+            candidate_urls.push(latest_url);
+        }
+    } else if instance_id == "petablocks-create2" {
+        if let Some(latest_url) = fetch_latest_modpack_asset_url(
+            client,
+            "create2-v",
+            "launcher-manifest-create2.json",
+        )
+        .await
+        {
+            candidate_urls.push(latest_url);
         }
     }
     let trimmed = manifest_url.trim();
@@ -172,6 +224,19 @@ pub async fn fetch_changelog(instance_id: &str, changelog_url: &str) -> Result<S
     validate_version_token("instance_id", instance_id)?;
     let client = http_client();
     let mut candidate_urls = Vec::new();
+    if instance_id == "petablocks-s2" {
+        if let Some(latest_url) =
+            fetch_latest_modpack_asset_url(client, "s2-v", "CHANGELOG.md").await
+        {
+            candidate_urls.push(latest_url);
+        }
+    } else if instance_id == "petablocks-create2" {
+        if let Some(latest_url) =
+            fetch_latest_modpack_asset_url(client, "create2-v", "CHANGELOG.md").await
+        {
+            candidate_urls.push(latest_url);
+        }
+    }
     if !changelog_url.trim().is_empty() && is_allowed_download_url(changelog_url.trim()) {
         candidate_urls.push(changelog_url.trim().to_string());
     }

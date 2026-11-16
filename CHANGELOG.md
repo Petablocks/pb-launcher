@@ -3,6 +3,12 @@
 All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.18.3] - 2026-11-16
+### Fixed
+- **Automatic Latest Modpack Resolution**:
+  - Updated `fetch_manifest` and `fetch_changelog` in `src-tauri/src/sync/manifest.rs` to dynamically resolve the newest `s2-v*` and `create2-v*` release assets from `Petablocks/pb-modpacks` via the GitHub Releases API before falling back to static URLs.
+  - New modpack releases now appear in the launcher automatically without needing to re-upload manifests to `pb-launcher` or update `launcher-config.json`.
+
 ## [1.18.2] - 2026-11-15
 ### Fixed
 - **Alternate Server Live Ping & Player Count**:
