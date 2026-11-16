@@ -1,0 +1,12 @@
+name: runner-test
+on: workflow_dispatch
+jobs:
+  linux:
+    runs-on: [self-hosted, linux]
+    steps:
+      - run: uname -a && docker run --rm hello-world
+  windows:
+    runs-on: [self-hosted, windows]
+    steps:
+      - run: node -v; rustc -V; cargo clippy -V
+        shell: pwsh
