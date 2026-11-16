@@ -13,7 +13,7 @@
       "loader": "NeoForge",
       "loaderIcon": "/cards/neoforge-icon.png",
       "manifestUrl": "https://github.com/Petablocks/pb-launcher/releases/latest/download/launcher-manifest.json",
-      "changelogUrl": "https://github.com/Petablocks/pb-modpacks/releases/download/s2-v0.22.0/CHANGELOG.md",
+      "changelogUrl": "https://github.com/Petablocks/pb-modpacks/releases/download/s2-v0.23.0/CHANGELOG.md",
       "status": "playable",
       "logoImage": "/cards/logo-season2.png",
       "bgImage": "/cards/bg-season2.jpg",
