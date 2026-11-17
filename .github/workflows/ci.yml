@@ -15,7 +15,7 @@ permissions:
 jobs:
   frontend:
     name: Frontend (typecheck, lint, build)
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux]
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
@@ -35,7 +35,10 @@ jobs:
 
   backend:
     name: Backend (fmt, clippy, tests)
-    runs-on: windows-latest
+    runs-on: [self-hosted, windows]
+    defaults:
+      run:
+        shell: pwsh
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - uses: dtolnay/rust-toolchain@stable
@@ -45,7 +48,7 @@ jobs:
         with:
           workspaces: "./src-tauri -> target"
       # tauri's build script expects the frontend output directory to exist.
-      - run: mkdir dist
+      - run: New-Item -ItemType Directory -Force -Path dist | Out-Null
       - run: cargo fmt --manifest-path src-tauri/Cargo.toml --check
       - run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
       - run: cargo test --manifest-path src-tauri/Cargo.toml
