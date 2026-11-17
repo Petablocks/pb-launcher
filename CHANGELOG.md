@@ -3,6 +3,12 @@
 All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.20.0] - 2026-11-17
+### Added
+- **PETABLOCKS Files Tab (`file.petablocks.com`)**:
+  - Added a **Files** tab (`src/pages/Files.tsx`) with folder breadcrumbs, search filtering, and direct download to `Downloads`.
+  - Added `files_list` and `files_download` Tauri commands in `src-tauri/src/community.rs` and `src-tauri/src/lib.rs`, gated by Microsoft auth and Discord roles (**Founder**, **Administrator**, **Legacy Players**).
+
 ## [1.19.0] - 2026-11-16
 ### Added
 - **Live Discord Rich Presence**:
