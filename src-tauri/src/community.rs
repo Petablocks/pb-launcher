@@ -242,6 +242,12 @@ pub fn latest_crash_report(instance_id: &str) -> Option<CrashReportInfo> {
     let entries = fs::read_dir(&dir).ok()?;
     let mut latest: Option<(u64, std::path::PathBuf, String)> = None;
 
+    let now_secs = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let max_age_secs = 48 * 3600;
+
     for entry in entries.flatten() {
         let Ok(meta) = entry.metadata() else { continue };
         if !meta.is_file() {
@@ -253,6 +259,9 @@ pub fn latest_crash_report(instance_id: &str) -> Option<CrashReportInfo> {
             .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
             .map(|d| d.as_secs())
             .unwrap_or(0);
+        if now_secs > 0 && now_secs.saturating_sub(mtime) > max_age_secs {
+            continue;
+        }
         let fname = entry.file_name().to_string_lossy().to_string();
         if latest.as_ref().map(|(t, _, _)| mtime > *t).unwrap_or(true) {
             latest = Some((mtime, entry.path(), fname));
@@ -662,77 +671,6 @@ pub fn update_discord_rpc_with_pid(
         pid,
         custom_start,
     });
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct RemoteFileEntry {
-    pub key: String,
-    pub name: String,
-    pub size: u64,
-    #[serde(default)]
-    pub last_modified: Option<String>,
-    pub download_url: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct RemoteFilesListing {
-    pub prefix: String,
-    pub folders: Vec<String>,
-    pub files: Vec<RemoteFileEntry>,
-}
-
-pub async fn list_remote_files(prefix: Option<&str>) -> Result<RemoteFilesListing, String> {
-    let (_profile, mc_token) = crate::auth::get_active_mc_session()
-        .ok_or_else(|| "Sign in with your Microsoft account to access PETABLOCKS Files.".to_string())?;
-    let clean_prefix = prefix.unwrap_or("").trim_start_matches('/');
-    let url = reqwest::Url::parse_with_params(
-        &format!("{PB_AUTH_BASE_URL}/api/public/launcher/files"),
-        &[("prefix", clean_prefix)],
-    )
-    .map_err(|e| format!("Invalid URL: {e}"))?;
-    let res = http_client()
-        .get(url)
-        .bearer_auth(mc_token)
-        .send()
-        .await
-        .map_err(|e| format!("Could not reach PETABLOCKS Files API: {e}"))?;
-    if res.status() == reqwest::StatusCode::FORBIDDEN {
-        return Err("Access restricted to Founder, Administrator, and Legacy Players roles.".into());
-    }
-    if !res.status().is_success() {
-        return Err(format!("Files API returned HTTP {}", res.status()));
-    }
-    res.json::<RemoteFilesListing>()
-        .await
-        .map_err(|e| format!("Invalid files response: {e}"))
-}
-
-pub async fn download_remote_file(url: &str, filename: &str) -> Result<String, String> {
-    let parsed = reqwest::Url::parse(url).map_err(|_| "Invalid download URL.".to_string())?;
-    if parsed.scheme() != "https" || parsed.host_str() != Some("file.petablocks.com") {
-        return Err("Rejected download URL outside file.petablocks.com.".into());
-    }
-    let safe_name = std::path::Path::new(filename)
-        .file_name()
-        .and_then(|n| n.to_str())
-        .filter(|n| !n.is_empty() && !n.contains(".."))
-        .ok_or_else(|| "Invalid filename.".to_string())?;
-    let downloads = dirs::download_dir().ok_or_else(|| "Could not locate Downloads folder.".to_string())?;
-    let dest = downloads.join(safe_name);
-
-    let res = http_client()
-        .get(parsed)
-        .send()
-        .await
-        .map_err(|e| format!("Download failed: {e}"))?;
-    if !res.status().is_success() {
-        return Err(format!("Download returned HTTP {}", res.status()));
-    }
-    let bytes = res.bytes().await.map_err(|e| format!("Failed reading download: {e}"))?;
-    fs::write(&dest, &bytes).map_err(|e| format!("Failed saving file: {e}"))?;
-    Ok(dest.to_string_lossy().to_string())
 }
 
 fn write_ipc_frame(pipe: &mut std::fs::File, opcode: u32, payload: &[u8]) -> std::io::Result<()> {

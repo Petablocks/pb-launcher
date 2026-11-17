@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { CheckCircle2, Clock, FileText, Sparkles, Terminal } from "lucide-react";
+import { CheckCircle2, Clock, FileText, RefreshCw, Sparkles, Terminal } from "lucide-react";
 import { MinecraftServerIcon } from "../../components/MinecraftServerIcon";
 import { Badge, Button, cn } from "../../components/ui";
 import { Instance } from "../../instances";
@@ -19,7 +19,8 @@ export default function InstanceHero({
   onShowLogs: () => void;
   onShowChangelog: () => void;
 }) {
-  const { runtimeOf, serverStatus } = useLauncher();
+  const { runtimeOf, serverStatus, refreshInstance, sync } = useLauncher();
+  const [checkingUpdate, setCheckingUpdate] = useState(false);
   const [selectedServerId, setSelectedServerId] = useState<string>("main");
   useEffect(() => {
     setSelectedServerId("main");
@@ -154,6 +155,23 @@ export default function InstanceHero({
                   </Button>
                   <Button size="sm" variant="ghost" icon={<Terminal size={13} />} onClick={onShowLogs}>
                     Game log
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    icon={<RefreshCw size={13} className={checkingUpdate ? "animate-spin" : ""} />}
+                    disabled={checkingUpdate || action.disabled}
+                    onClick={async () => {
+                      setCheckingUpdate(true);
+                      try {
+                        await refreshInstance(inst);
+                        await sync(inst);
+                      } finally {
+                        setCheckingUpdate(false);
+                      }
+                    }}
+                  >
+                    Resync
                   </Button>
                 </span>
               )}
