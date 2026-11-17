@@ -4,6 +4,7 @@ import {
   Bug,
   DownloadCloud,
   ExternalLink,
+  FolderOpen,
   Gamepad2,
   Image,
   Newspaper,
@@ -17,6 +18,7 @@ import TitleBar from "./components/TitleBar";
 import { Alert, Badge, Button, IconButton, cn } from "./components/ui";
 import { openExternal } from "./lib/open";
 import Feedback from "./pages/Feedback";
+import Files from "./pages/Files";
 import Mods from "./pages/Mods";
 import News, { SUPPORT_URL } from "./pages/News";
 import Packs from "./pages/Packs";
@@ -26,13 +28,14 @@ import Settings from "./pages/Settings";
 import { LauncherProvider, useLauncher } from "./state/LauncherProvider";
 import { APP_VERSION } from "./version";
 
-type Tab = "play" | "mods" | "packs" | "screenshots" | "news" | "feedback" | "settings";
+type Tab = "play" | "mods" | "packs" | "screenshots" | "files" | "news" | "feedback" | "settings";
 
 const NAV: { id: Tab; label: string; icon: typeof Gamepad2 }[] = [
   { id: "play", label: "Play", icon: Gamepad2 },
   { id: "mods", label: "Mods", icon: Boxes },
   { id: "packs", label: "Shaders & Packs", icon: Sparkles },
   { id: "screenshots", label: "Screenshots", icon: Image },
+  { id: "files", label: "Files", icon: FolderOpen },
   { id: "news", label: "News", icon: Newspaper },
   { id: "feedback", label: "Feedback", icon: Bug },
   { id: "settings", label: "Settings", icon: SettingsIcon },
@@ -43,6 +46,7 @@ const PAGES: Record<Tab, ComponentType> = {
   mods: Mods,
   packs: Packs,
   screenshots: Screenshots,
+  files: Files,
   news: News,
   feedback: Feedback,
   settings: Settings,
