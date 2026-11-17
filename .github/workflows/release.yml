@@ -28,9 +28,6 @@ jobs:
           node-version: 22
           cache: npm
 
-      - name: Setup Rust stable (MSVC)
-        uses: dtolnay/rust-toolchain@stable
-
       - name: Rust cache
         uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2.7.5
         with:
