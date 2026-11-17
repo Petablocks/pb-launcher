@@ -378,16 +378,6 @@ async fn discord_check_link(uuid: String) -> Result<DiscordLinkStatus, String> {
 }
 
 #[tauri::command]
-async fn files_list(prefix: Option<String>) -> Result<community::RemoteFilesListing, String> {
-    community::list_remote_files(prefix.as_deref()).await
-}
-
-#[tauri::command]
-async fn files_download(url: String, filename: String) -> Result<String, String> {
-    community::download_remote_file(&url, &filename).await
-}
-
-#[tauri::command]
 async fn discord_request_link_code(
     uuid: String,
     username: String,
@@ -483,8 +473,6 @@ pub fn run() {
             updater_install,
             splash_complete,
             discord_check_link,
-            files_list,
-            files_download,
             discord_request_link_code
         ])
         .run(tauri::generate_context!())

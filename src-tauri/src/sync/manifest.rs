@@ -148,12 +148,9 @@ pub async fn fetch_manifest(
             candidate_urls.push(latest_url);
         }
     } else if instance_id == "petablocks-create2" {
-        if let Some(latest_url) = fetch_latest_modpack_asset_url(
-            client,
-            "create2-v",
-            "launcher-manifest-create2.json",
-        )
-        .await
+        if let Some(latest_url) =
+            fetch_latest_modpack_asset_url(client, "create2-v", "launcher-manifest-create2.json")
+                .await
         {
             candidate_urls.push(latest_url);
         }
